@@ -1,58 +1,156 @@
-"""Core dorking/search engine scraping logic."""
+"""Core dorking/search engine scraping logic using BeautifulSoup."""
 
-import re
 import logging
-from urllib.parse import quote_plus, unquote, urlparse
+from urllib.parse import unquote, urlparse, parse_qs
 
 import requests
+from bs4 import BeautifulSoup
 
 REQUEST_TIMEOUT = 15
 
 logger = logging.getLogger(__name__)
 
-# Search engine configurations: (base_url, regex_pattern, page_param_builder)
+_DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+# ---------------------------------------------------------------------------
+# BeautifulSoup-based extractor functions (one per search engine)
+# ---------------------------------------------------------------------------
+
+
+def _extract_google(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from a Google search page."""
+    urls: list[str] = []
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if href.startswith("/url?"):
+            params = parse_qs(urlparse(href).query)
+            if "q" in params:
+                urls.append(params["q"][0])
+    return urls
+
+
+def _extract_bing(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from a Bing search page."""
+    urls: list[str] = []
+    for a_tag in soup.select("li.b_algo h2 a[href]"):
+        urls.append(a_tag["href"])
+    return urls
+
+
+def _extract_yahoo(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from a Yahoo search page."""
+    urls: list[str] = []
+    for a_tag in soup.find_all("a", href=True):
+        classes = a_tag.get("class", [])
+        if "ac-algo" in classes:
+            urls.append(a_tag["href"])
+    # Fallback: broader Yahoo result link selector
+    if not urls:
+        for a_tag in soup.select("h3.title a[href]"):
+            urls.append(a_tag["href"])
+    return urls
+
+
+def _extract_duck(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from DuckDuckGo HTML search page."""
+    urls: list[str] = []
+    for a_tag in soup.select("a.result__a[href]"):
+        urls.append(a_tag["href"])
+    # Fallback: nofollow redirect links with uddg param
+    if not urls:
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag["href"]
+            if "uddg=" in href:
+                full = "https:" + href if href.startswith("//") else href
+                params = parse_qs(urlparse(full).query)
+                if "uddg" in params:
+                    urls.append(params["uddg"][0])
+    return urls
+
+
+def _extract_shodan(soup: BeautifulSoup) -> list[str]:
+    """Extract result IPs/URLs from a Shodan search page."""
+    urls: list[str] = []
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if href.startswith("/host/"):
+            ip = href[len("/host/"):]
+            urls.append(f"https://www.shodan.io/host/{ip}")
+    return urls
+
+
+def _extract_ask(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from an Ask.com search page."""
+    urls: list[str] = []
+    for a_tag in soup.select("a.PartialSearchResults-item-title-link[href]"):
+        urls.append(a_tag["href"])
+    # Fallback
+    if not urls:
+        for a_tag in soup.find_all("a", href=True, target="_blank"):
+            href = a_tag["href"]
+            if href.startswith("http"):
+                urls.append(href)
+    return urls
+
+
+# ---------------------------------------------------------------------------
+# Engine configurations
+# ---------------------------------------------------------------------------
+
 ENGINES = {
     "google": {
         "base_url": "https://www.google.com/search",
-        "pattern": r'"><a href="\/url\?q=(.*?)&amp;sa=U&amp;',
+        "extract": _extract_google,
         "build_params": lambda query, page: {"q": query, "start": str(page * 10)},
         "supports_pagination": True,
+        "method": "GET",
     },
     "shodan": {
         "base_url": "https://www.shodan.io/search",
-        "pattern": r'"><a href="/host/(.*?)">',
+        "extract": _extract_shodan,
         "build_params": lambda query, page: {"query": query, "page": str(page + 1)},
         "supports_pagination": True,
+        "method": "GET",
     },
     "bing": {
         "base_url": "https://www.bing.com/search",
-        "pattern": r'</li><li class="b_algo"><h2><a href="(.*?)" h="ID=SERP,',
+        "extract": _extract_bing,
         "build_params": lambda query, page: {"q": query, "first": str(page * 10 + 1)},
         "supports_pagination": True,
+        "method": "GET",
     },
     "duck": {
         "base_url": "https://html.duckduckgo.com/html/",
-        "pattern": (
-            r'<a rel="nofollow" href="//duckduckgo.com/l/\?kh=-1&amp;uddg=(.*?)">'
-        ),
+        "extract": _extract_duck,
         "build_params": lambda query, page: {"q": query},
         "supports_pagination": False,
+        "method": "POST",
     },
     "yahoo": {
         "base_url": "https://search.yahoo.com/search",
-        "pattern": (
-            r'" ac-algo fz-l ac-21th lh-24" href="(.*?)" referrerpolicy="origin'
-        ),
+        "extract": _extract_yahoo,
         "build_params": lambda query, page: {"p": query, "b": str(page * 10 + 1)},
         "supports_pagination": True,
+        "method": "GET",
     },
     "ask": {
         "base_url": "https://www.ask.com/web",
-        "pattern": r"target=\"_blank\" href='(.*?)' data-unified=",
+        "extract": _extract_ask,
         "build_params": lambda query, page: {"q": query, "page": str(page + 1)},
         "supports_pagination": True,
+        "method": "GET",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
 
 
 def _is_valid_url(url: str) -> bool:
@@ -69,9 +167,10 @@ def _make_request(
     params: dict,
     proxy: str = "",
     headers: dict | None = None,
+    method: str = "GET",
 ) -> str:
-    """Make an HTTP GET request and return the response text."""
-    req_headers = {"User-Agent": "Mozilla/5.0"}
+    """Make an HTTP request and return the response text."""
+    req_headers = {"User-Agent": _DEFAULT_USER_AGENT}
     if headers:
         req_headers.update(headers)
 
@@ -81,18 +180,32 @@ def _make_request(
         req_headers["Connection"] = "close"
 
     try:
-        resp = requests.get(
-            url,
-            params=params,
-            headers=req_headers,
-            proxies=proxies,
-            timeout=REQUEST_TIMEOUT,
-        )
+        if method.upper() == "POST":
+            resp = requests.post(
+                url,
+                data=params,
+                headers=req_headers,
+                proxies=proxies,
+                timeout=REQUEST_TIMEOUT,
+            )
+        else:
+            resp = requests.get(
+                url,
+                params=params,
+                headers=req_headers,
+                proxies=proxies,
+                timeout=REQUEST_TIMEOUT,
+            )
         resp.raise_for_status()
         return resp.text
     except requests.RequestException as exc:
         logger.error("Request failed: %s", exc)
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def search(
@@ -132,16 +245,23 @@ def search(
 
     for page in range(max_pages):
         params = cfg["build_params"](query, page)
-        html = _make_request(cfg["base_url"], params, proxy=proxy, headers=headers)
+        html = _make_request(
+            cfg["base_url"],
+            params,
+            proxy=proxy,
+            headers=headers,
+            method=cfg.get("method", "GET"),
+        )
         if not html:
             break
 
-        matches = re.findall(cfg["pattern"], html)
+        soup = BeautifulSoup(html, "html.parser")
+        matches = cfg["extract"](soup)
         if not matches:
             break
 
-        for match in matches:
-            url = unquote(match)
+        for url in matches:
+            url = unquote(url)
             if not _is_valid_url(url):
                 continue
             if url not in seen:

@@ -296,6 +296,81 @@ class TestSearch:
         results = search("test", engine="google", pages=1)
         assert results == ["https://valid.com"]
 
+    def test_whitespace_engine_name(self):
+        """Engine names with extra whitespace should be normalized."""
+        with pytest.raises(ValueError, match="Unknown engine"):
+            search("test", engine="  nonexistent  ")
+
+    @patch("dorker._make_request")
+    def test_engine_case_insensitive(self, mock_req):
+        html = '<a class="result__a" href="https://example.com">R</a>'
+        mock_req.return_value = html
+        results = search("test", engine="GOOGLE", pages=1)
+        # Should work — engine name normalized to lowercase
+        assert isinstance(results, list)
+
+    @patch("dorker._make_request")
+    def test_search_with_custom_headers(self, mock_req):
+        mock_req.return_value = '<a href="/url?q=https://r.com&sa=U&">R</a>'
+        results = search("test", engine="google", headers={"X-Custom": "val"})
+        assert isinstance(results, list)
+        call_kwargs = mock_req.call_args
+        assert call_kwargs.kwargs.get("headers") == {"X-Custom": "val"}
+
+    @patch("dorker._make_request")
+    def test_search_with_proxy(self, mock_req):
+        mock_req.return_value = '<a href="/url?q=https://r.com&sa=U&">R</a>'
+        results = search("test", engine="google", proxy="http://proxy:8080")
+        assert isinstance(results, list)
+        call_kwargs = mock_req.call_args
+        assert call_kwargs.kwargs.get("proxy") == "http://proxy:8080"
+
+    @patch("dorker._make_request")
+    def test_search_multiple_pages(self, mock_req):
+        """Verify that multiple pages are requested."""
+        page_html = '<a href="/url?q=https://r.com&sa=U&">R</a>'
+        mock_req.return_value = page_html
+        search("test", engine="google", pages=3)
+        assert mock_req.call_count == 3
+
+    @patch("dorker._make_request")
+    def test_search_zero_pages_treated_as_one(self, mock_req):
+        mock_req.return_value = '<a href="/url?q=https://r.com&sa=U&">R</a>'
+        results = search("test", engine="google", pages=0)
+        assert isinstance(results, list)
+
+    @patch("dorker._make_request")
+    def test_bing_search(self, mock_req):
+        html = """
+        <ol>
+            <li class="b_algo"><h2><a href="https://bing-result.com">R</a></h2></li>
+        </ol>
+        """
+        mock_req.return_value = html
+        results = search("test", engine="bing", pages=1)
+        assert results == ["https://bing-result.com"]
+
+    @patch("dorker._make_request")
+    def test_shodan_search(self, mock_req):
+        html = '<a href="/host/1.2.3.4">1.2.3.4</a>'
+        mock_req.return_value = html
+        results = search("test", engine="shodan", pages=1)
+        assert results == ["https://www.shodan.io/host/1.2.3.4"]
+
+    @patch("dorker._make_request")
+    def test_yahoo_search(self, mock_req):
+        html = '<a class="ac-algo" href="https://yahoo-result.com">R</a>'
+        mock_req.return_value = html
+        results = search("test", engine="yahoo", pages=1)
+        assert results == ["https://yahoo-result.com"]
+
+    @patch("dorker._make_request")
+    def test_ask_search(self, mock_req):
+        html = '<a class="PartialSearchResults-item-title-link" href="https://ask-result.com">R</a>'
+        mock_req.return_value = html
+        results = search("test", engine="ask", pages=1)
+        assert results == ["https://ask-result.com"]
+
 
 class TestEnginesConfig:
     """Verify ENGINES dictionary integrity."""

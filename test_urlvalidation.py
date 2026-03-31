@@ -185,3 +185,37 @@ class TestIsSafeUrl:
                 (socket.AF_INET, 0, 0, "", ("93.184.216.35", 0)),
             ]
             assert is_safe_url("http://cdn.example.com") is True
+
+    # ------------------------------------------------------------------
+    # Additional edge cases
+    # ------------------------------------------------------------------
+
+    def test_none_input(self):
+        """Passing None should not crash, should return False."""
+        assert is_safe_url(None) is False
+
+    def test_integer_input(self):
+        """Passing non-string should not crash."""
+        assert is_safe_url(12345) is False
+
+    def test_blocks_reserved_ip(self):
+        with patch("urlvalidation.socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (socket.AF_INET, 0, 0, "", ("0.0.0.0", 0)),
+            ]
+            assert is_safe_url("http://zero.host") is False
+
+    def test_url_with_authentication(self):
+        """URL with user:pass should be checked for safety."""
+        with patch("urlvalidation.socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (socket.AF_INET, 0, 0, "", ("93.184.216.34", 0)),
+            ]
+            assert is_safe_url("http://user:pass@example.com") is True
+
+    def test_blocks_ipv6_private(self):
+        with patch("urlvalidation.socket.getaddrinfo") as mock_gai:
+            mock_gai.return_value = [
+                (socket.AF_INET6, 0, 0, "", ("fd00::1", 0, 0, 0)),
+            ]
+            assert is_safe_url("http://[fd00::1]") is False

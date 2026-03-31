@@ -329,3 +329,144 @@ class TestScanner:
             "scan_lfi": "1",
         })
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Additional edge case tests for search route
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEdgeCases:
+    def test_search_whitespace_only_query(self, client):
+        resp = client.post("/search", data={"query": "   ", "engine": "google"})
+        assert resp.status_code == 200
+        assert b"Query is required" in resp.data
+
+    @patch("app.search")
+    def test_search_headers_without_colon_ignored(self, mock_search, client):
+        """Header lines without a colon separator should be silently skipped."""
+        mock_search.return_value = []
+        resp = client.post("/search", data={
+            "query": "test",
+            "engine": "google",
+            "headers": "no-colon-here",
+        })
+        assert resp.status_code == 200
+
+    @patch("app.search")
+    def test_search_empty_header_lines_skipped(self, mock_search, client):
+        mock_search.return_value = []
+        resp = client.post("/search", data={
+            "query": "test",
+            "engine": "google",
+            "headers": "\n\n\n",
+        })
+        assert resp.status_code == 200
+
+    @patch("app.search")
+    def test_search_pages_very_large(self, mock_search, client):
+        mock_search.return_value = []
+        resp = client.post("/search", data={
+            "query": "test",
+            "engine": "google",
+            "pages": "999",
+        })
+        assert resp.status_code == 200
+
+    @patch("app.search")
+    def test_search_result_count_in_response(self, mock_search, client):
+        mock_search.return_value = ["https://r1.com", "https://r2.com"]
+        resp = client.post("/search", data={
+            "query": "test",
+            "engine": "google",
+        })
+        assert resp.status_code == 200
+
+    @patch("app.search")
+    def test_search_all_engines(self, mock_search, client):
+        """All engine names should be accepted."""
+        from dorker import ENGINES
+        mock_search.return_value = []
+        for engine_name in ENGINES:
+            resp = client.post("/search", data={
+                "query": "test",
+                "engine": engine_name,
+            })
+            assert resp.status_code == 200, f"Engine '{engine_name}' failed"
+
+
+# ---------------------------------------------------------------------------
+# Additional edge case tests for crawler route
+# ---------------------------------------------------------------------------
+
+
+class TestCrawlerEdgeCases:
+    def test_crawl_ftp_url_rejected(self, client):
+        resp = client.post("/crawler/crawl", data={"target_url": "ftp://example.com"})
+        assert resp.status_code == 200
+        assert b"Invalid URL" in resp.data
+
+    def test_crawl_negative_depth_clamped(self, client):
+        with patch("app.crawl") as mock_crawl, patch("app.is_safe_url", return_value=True):
+            mock_crawl.return_value = {
+                "all_urls": [], "param_urls": [], "form_urls": [], "external_urls": []
+            }
+            resp = client.post("/crawler/crawl", data={
+                "target_url": "http://example.com",
+                "depth": "-1",
+            })
+            assert resp.status_code == 200
+            assert mock_crawl.call_args.kwargs["depth"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Additional edge case tests for scanner route
+# ---------------------------------------------------------------------------
+
+
+class TestScannerEdgeCases:
+    @patch("app.test_sqli")
+    @patch("app.test_xss")
+    @patch("app.test_lfi")
+    @patch("app.is_safe_url")
+    def test_scan_only_sqli_selected(self, mock_safe, mock_lfi, mock_xss, mock_sqli, client):
+        mock_safe.return_value = True
+        mock_sqli.return_value = []
+        mock_xss.return_value = []
+        mock_lfi.return_value = []
+        resp = client.post("/scanner/scan", data={
+            "urls": "http://example.com/page?id=1",
+            "scan_sqli": "1",
+        })
+        assert resp.status_code == 200
+        mock_sqli.assert_called()
+        mock_xss.assert_not_called()
+        mock_lfi.assert_not_called()
+
+    @patch("app.test_sqli")
+    @patch("app.test_xss")
+    @patch("app.test_lfi")
+    @patch("app.is_safe_url")
+    def test_scan_only_xss_selected(self, mock_safe, mock_lfi, mock_xss, mock_sqli, client):
+        mock_safe.return_value = True
+        mock_sqli.return_value = []
+        mock_xss.return_value = []
+        mock_lfi.return_value = []
+        resp = client.post("/scanner/scan", data={
+            "urls": "http://example.com/page?id=1",
+            "scan_xss": "1",
+        })
+        assert resp.status_code == 200
+        mock_sqli.assert_not_called()
+        mock_xss.assert_called()
+        mock_lfi.assert_not_called()
+
+    def test_scan_mixed_valid_invalid_urls(self, client):
+        with patch("app.test_sqli", return_value=[]), \
+             patch("app.test_xss", return_value=[]), \
+             patch("app.test_lfi", return_value=[]), \
+             patch("app.is_safe_url", return_value=True):
+            resp = client.post("/scanner/scan", data={
+                "urls": "http://example.com/p?id=1\nnot-a-url\nhttp://other.com/q?x=2",
+            })
+            assert resp.status_code == 200

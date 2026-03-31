@@ -6,6 +6,8 @@ from urllib.parse import quote_plus, unquote, urlparse
 
 import requests
 
+REQUEST_TIMEOUT = 15
+
 logger = logging.getLogger(__name__)
 
 # Search engine configurations: (base_url, regex_pattern, page_param_builder)
@@ -84,7 +86,7 @@ def _make_request(
             params=params,
             headers=req_headers,
             proxies=proxies,
-            timeout=15,
+            timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.text

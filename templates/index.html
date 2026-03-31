@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>go-dork &mdash; Search Engine Dorking Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>go-dork</h1>
+            <p class="subtitle">Search Engine Dorking Tool</p>
+        </header>
+
+        {% if errors %}
+        <div class="alert alert-error">
+            {% for error in errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('do_search') }}" class="search-form">
+            <div class="form-group">
+                <label for="query">Dork Query</label>
+                <input
+                    type="text"
+                    id="query"
+                    name="query"
+                    placeholder='e.g. inurl:"/admin" site:example.com'
+                    value="{{ query or '' }}"
+                    required
+                >
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="engine">Search Engine</label>
+                    <select id="engine" name="engine">
+                        {% for eng in engines %}
+                        <option value="{{ eng }}" {% if selected_engine == eng %}selected{% endif %}>
+                            {{ eng | capitalize }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="pages">Pages</label>
+                    <input
+                        type="number"
+                        id="pages"
+                        name="pages"
+                        min="1"
+                        max="100"
+                        value="{{ pages or 1 }}"
+                    >
+                </div>
+            </div>
+
+            <details class="advanced-options">
+                <summary>Advanced Options</summary>
+
+                <div class="form-group">
+                    <label for="proxy">Proxy URL</label>
+                    <input
+                        type="text"
+                        id="proxy"
+                        name="proxy"
+                        placeholder="http://127.0.0.1:8080 or socks5://127.0.0.1:1080"
+                        value="{{ proxy or '' }}"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="headers">Custom Headers <small>(one per line, Name: Value)</small></label>
+                    <textarea
+                        id="headers"
+                        name="headers"
+                        rows="3"
+                        placeholder="Cookie: session=abc123&#10;X-Custom: value"
+                    >{{ headers or '' }}</textarea>
+                </div>
+            </details>
+
+            <button type="submit" class="btn-search">Search</button>
+        </form>
+
+        {% if results is defined %}
+        <section class="results">
+            <h2>Results <span class="result-count">({{ result_count }})</span></h2>
+            {% if results %}
+            <ul class="result-list">
+                {% for url in results %}
+                <li>
+                    <a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="no-results">No results found.</p>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <footer>
+            <p>go-dork v1.0.1 &mdash; Originally by <a href="https://github.com/dwisiswant0" target="_blank">@dwisiswant0</a></p>
+        </footer>
+    </div>
+</body>
+</html>

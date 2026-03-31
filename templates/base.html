@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}go-dork{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{{ url_for('index') }}" class="nav-brand">go-dork</a>
+            <ul class="nav-links">
+                <li><a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' or request.endpoint == 'do_search' %}active{% endif %}">Search</a></li>
+                <li><a href="{{ url_for('dorkmaker') }}" class="{% if request.endpoint == 'dorkmaker' or request.endpoint == 'dorkmaker_build' %}active{% endif %}">Dork Maker</a></li>
+                <li><a href="{{ url_for('crawler_page') }}" class="{% if request.endpoint == 'crawler_page' or request.endpoint == 'do_crawl' %}active{% endif %}">Crawler</a></li>
+                <li><a href="{{ url_for('scanner_page') }}" class="{% if request.endpoint == 'scanner_page' or request.endpoint == 'do_scan' %}active{% endif %}">Scanner</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% if errors %}
+        <div class="alert alert-error">
+            {% for error in errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+
+        <footer>
+            <p>go-dork v1.0.1 &mdash; Originally by <a href="https://github.com/dwisiswant0" target="_blank">@dwisiswant0</a></p>
+        </footer>
+    </div>
+</body>
+</html>

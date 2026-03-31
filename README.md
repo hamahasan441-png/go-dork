@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-MIT-_red.svg)](https://opensource.org/licenses/MIT)
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwisiswant0/go-dork/issues)
 
-The fastest dork scanner — now with a **Python + Flask web frontend**.
+The fastest dork scanner — now with a **Python + Flask web frontend** featuring an advanced dork maker, URL crawler, and vulnerability scanner.
 
 <img src="https://user-images.githubusercontent.com/25837540/111008561-f22f9c80-83c3-11eb-8500-fb63456a4614.png" height="350">
 
@@ -13,6 +13,9 @@ There are also various search engines supported by go-dork, including Google, Sh
 - [Usage](#usage)
   - [Web Interface](#web-interface)
   - [Search Engines](#search-engines)
+  - [Dork Maker](#dork-maker)
+  - [URL Crawler](#url-crawler)
+  - [Vulnerability Scanner](#vulnerability-scanner)
   - [Advanced Options](#advanced-options)
 - [Go CLI (Legacy)](#go-cli-legacy)
 - [Supporting Materials](#supporting-materials)
@@ -41,16 +44,11 @@ python app.py
 
 Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
-The web interface provides:
-- A search form with a query input field
-- A dropdown to select the search engine
-- Page count selector for pagination
-- Advanced options for proxy and custom HTTP headers
-- Results displayed as clickable links
+The web interface provides four main tools accessible via the top navigation bar:
 
 ### Search Engines
 
-The following search engines are supported:
+The **Search** page lets you run dork queries across multiple search engines:
 
 | Engine       | Description                        |
 |--------------|------------------------------------|
@@ -60,6 +58,41 @@ The following search engines are supported:
 | **Duck**     | DuckDuckGo (single page only)      |
 | **Yahoo**    | Yahoo Search                       |
 | **Ask**      | Ask.com                            |
+
+### Dork Maker
+
+The **Dork Maker** page helps you build advanced dork queries:
+
+- **Query Builder**: Add multiple operators (site, inurl, intitle, intext, filetype, ext, etc.) with values and optional NOT negation
+- **Preset Templates**: Browse categories of pre-built dorks — Admin Panels, Login Pages, Exposed Files, Database Exposure, Sensitive Information, Vulnerable Servers, Error Messages, and IoT/Cameras
+- **Operator Reference**: Quick reference table for all supported dork operators
+- Generated queries can be sent directly to the Search page with one click
+
+### URL Crawler
+
+The **Crawler** page discovers URLs on a target website:
+
+- Crawls target pages up to a configurable depth (1–5 levels)
+- Collects all internal URLs, URLs with query parameters, form action URLs, and external URLs
+- Categorizes results with expandable sections
+- URLs with parameters can be sent directly to the Vulnerability Scanner
+
+### Vulnerability Scanner
+
+The **Scanner** page tests URLs for common web vulnerabilities:
+
+| Scan Type | Description | Severity |
+|-----------|-------------|----------|
+| **SQLi**  | SQL Injection — tests for error-based SQL injection using common payloads | High |
+| **XSS**   | Cross-Site Scripting — tests for reflected XSS using marker-based payloads | High–Medium |
+| **LFI**   | Local File Inclusion — tests for path traversal and file inclusion | Critical |
+
+- Accepts multiple URLs (one per line)
+- Configurable scan types (SQLi, XSS, LFI)
+- Results sorted by severity with detailed findings table
+- Optional proxy support for all scans
+
+> **⚠️ Disclaimer:** Only scan URLs you have explicit permission to test. Unauthorized scanning may violate laws and regulations.
 
 ### Advanced Options
 

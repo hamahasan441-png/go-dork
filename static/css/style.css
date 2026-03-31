@@ -10,6 +10,8 @@
     --accent-hover: #79c0ff;
     --error: #f85149;
     --success: #3fb950;
+    --warning: #d29922;
+    --critical: #ff7b72;
     --border: #30363d;
     --radius: 6px;
 }
@@ -29,9 +31,62 @@ body {
 }
 
 .container {
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 2rem 1rem;
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.nav-container {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 3.5rem;
+}
+
+.nav-brand {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 0.25rem;
+}
+
+.nav-links a {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--radius);
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.nav-links a:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.nav-links a.active {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
 }
 
 /* Header */
@@ -66,6 +121,27 @@ header h1 {
     color: var(--error);
 }
 
+/* Card */
+.card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.card h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.card h3 {
+    font-size: 1rem;
+    margin: 1rem 0 0.5rem 0;
+    color: var(--text-primary);
+}
+
 /* Form */
 .search-form {
     background-color: var(--bg-secondary);
@@ -95,10 +171,17 @@ header h1 {
 .form-row {
     display: flex;
     gap: 1rem;
+    align-items: flex-end;
 }
 
 .form-row .form-group {
     flex: 1;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
 }
 
 input[type="text"],
@@ -128,6 +211,27 @@ textarea {
     resize: vertical;
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.8rem;
+}
+
+/* Checkbox */
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.5rem 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--accent);
+}
+
+.checkbox-group {
+    display: flex;
+    gap: 1.25rem;
 }
 
 /* Advanced options */
@@ -164,7 +268,7 @@ textarea {
     padding-top: 0;
 }
 
-/* Button */
+/* Buttons */
 .btn-search {
     width: 100%;
     padding: 0.65rem;
@@ -180,6 +284,56 @@ textarea {
 
 .btn-search:hover {
     background-color: var(--accent-hover);
+}
+
+.btn-secondary {
+    padding: 0.5rem 1rem;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+    background-color: var(--border);
+}
+
+.btn-small {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.btn-small:hover {
+    background-color: rgba(88, 166, 255, 0.1);
+}
+
+.btn-danger {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: var(--error);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-top: 0.75rem;
+}
+
+.btn-danger:hover {
+    background-color: #da3633;
 }
 
 /* Results */
@@ -210,6 +364,7 @@ textarea {
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--border);
     word-break: break-all;
+    font-size: 0.875rem;
 }
 
 .result-list li:last-child {
@@ -219,7 +374,7 @@ textarea {
 .result-list a {
     color: var(--accent);
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
 }
 
 .result-list a:hover {
@@ -231,6 +386,276 @@ textarea {
     color: var(--text-secondary);
     text-align: center;
     padding: 1rem 0;
+}
+
+/* Results sections (collapsible) */
+.results-section {
+    margin-top: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.results-section summary {
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+    user-select: none;
+}
+
+.results-section summary:hover {
+    background-color: var(--border);
+}
+
+.results-section .result-list {
+    padding: 0.5rem 0.75rem;
+}
+
+.inline-form {
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Stats */
+.stats-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-box {
+    flex: 1;
+    min-width: 100px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.stat-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.125rem;
+}
+
+.stat-critical .stat-number { color: var(--critical); }
+.stat-high .stat-number { color: var(--error); }
+.stat-medium .stat-number { color: var(--warning); }
+
+/* Badge */
+.badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 10px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+
+.badge-accent {
+    background-color: rgba(88, 166, 255, 0.15);
+    color: var(--accent);
+}
+
+/* Operator row (dork maker) */
+.operator-row {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.operator-row .form-row {
+    margin-bottom: 0;
+}
+
+.operator-row .form-group {
+    margin-bottom: 0;
+}
+
+/* Built query output */
+.built-query {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+}
+
+.query-output {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.query-output code {
+    flex: 1;
+    font-size: 0.95rem;
+    color: var(--success);
+    word-break: break-all;
+}
+
+/* Template categories */
+.template-category {
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.template-category summary {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+    user-select: none;
+}
+
+.template-category summary:hover {
+    background-color: var(--border);
+}
+
+.template-list {
+    list-style: none;
+    padding: 0.5rem 0.75rem;
+}
+
+.template-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--border);
+    gap: 0.5rem;
+}
+
+.template-list li:last-child {
+    border-bottom: none;
+}
+
+.template-list code {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    flex: 1;
+    word-break: break-all;
+}
+
+/* Reference table */
+.ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.ref-table th,
+.ref-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+.ref-table th {
+    background-color: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ref-table td code {
+    color: var(--accent);
+}
+
+/* Findings table (scanner) */
+.findings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.findings-table th,
+.findings-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.findings-table th {
+    background-color: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.findings-table .payload {
+    max-width: 200px;
+    word-break: break-all;
+    color: var(--warning);
+}
+
+.findings-table .evidence {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Severity badges */
+.severity-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.severity-critical {
+    background-color: rgba(255, 123, 114, 0.15);
+    color: var(--critical);
+    border: 1px solid var(--critical);
+}
+
+.severity-high {
+    background-color: rgba(248, 81, 73, 0.15);
+    color: var(--error);
+    border: 1px solid var(--error);
+}
+
+.severity-medium {
+    background-color: rgba(210, 153, 34, 0.15);
+    color: var(--warning);
+    border: 1px solid var(--warning);
+}
+
+.severity-low {
+    background-color: rgba(139, 148, 158, 0.15);
+    color: var(--text-secondary);
+    border: 1px solid var(--text-secondary);
+}
+
+/* Disclaimer */
+.disclaimer-text {
+    font-size: 0.85rem;
+    color: var(--warning);
+    line-height: 1.7;
 }
 
 /* Footer */
@@ -261,5 +686,36 @@ footer a:hover {
 
     header h1 {
         font-size: 2rem;
+    }
+
+    .nav-links {
+        gap: 0;
+    }
+
+    .nav-links a {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .stats-row {
+        gap: 0.5rem;
+    }
+
+    .stat-box {
+        min-width: 70px;
+        padding: 0.5rem;
+    }
+
+    .stat-number {
+        font-size: 1.25rem;
+    }
+
+    .query-output {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .findings-table {
+        font-size: 0.75rem;
     }
 }

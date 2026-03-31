@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Scanner &mdash; go-dork{% endblock %}
+
+{% block content %}
+<header>
+    <h1>Vulnerability Scanner</h1>
+    <p class="subtitle">Test URLs for SQLi, XSS, and LFI/RFI vulnerabilities</p>
+</header>
+
+<section class="card">
+    <form method="POST" action="{{ url_for('do_scan') }}">
+        <div class="form-group">
+            <label for="urls">Target URLs <small>(one per line — URLs must have query parameters)</small></label>
+            <textarea
+                id="urls"
+                name="urls"
+                rows="6"
+                placeholder="https://example.com/page?id=1&#10;https://example.com/search?q=test"
+                required
+            >{{ raw_urls or '' }}</textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Scan Types</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="scan_sqli" value="1" {% if scan_sqli is not defined or scan_sqli %}checked{% endif %}> SQLi
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="scan_xss" value="1" {% if scan_xss is not defined or scan_xss %}checked{% endif %}> XSS
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="scan_lfi" value="1" {% if scan_lfi is not defined or scan_lfi %}checked{% endif %}> LFI/RFI
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="proxy">Proxy URL <small>(optional)</small></label>
+                <input
+                    type="text"
+                    id="proxy"
+                    name="proxy"
+                    placeholder="http://127.0.0.1:8080"
+                    value="{{ proxy or '' }}"
+                >
+            </div>
+        </div>
+
+        <button type="submit" class="btn-search">Start Scan</button>
+    </form>
+</section>
+
+{% if findings is defined %}
+<section class="card">
+    <h2>Scan Results</h2>
+
+    <div class="stats-row">
+        <div class="stat-box">
+            <span class="stat-number">{{ urls_scanned }}</span>
+            <span class="stat-label">URLs Scanned</span>
+        </div>
+        <div class="stat-box stat-critical">
+            <span class="stat-number">{{ findings | selectattr('severity', 'equalto', 'critical') | list | length }}</span>
+            <span class="stat-label">Critical</span>
+        </div>
+        <div class="stat-box stat-high">
+            <span class="stat-number">{{ findings | selectattr('severity', 'equalto', 'high') | list | length }}</span>
+            <span class="stat-label">High</span>
+        </div>
+        <div class="stat-box stat-medium">
+            <span class="stat-number">{{ findings | selectattr('severity', 'equalto', 'medium') | list | length }}</span>
+            <span class="stat-label">Medium</span>
+        </div>
+    </div>
+
+    {% if findings %}
+    <table class="findings-table">
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Type</th>
+                <th>Parameter</th>
+                <th>Payload</th>
+                <th>Evidence</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in findings %}
+            <tr>
+                <td><span class="severity-badge severity-{{ f.severity }}">{{ f.severity | upper }}</span></td>
+                <td>{{ f.type }}</td>
+                <td><code>{{ f.param }}</code></td>
+                <td><code class="payload">{{ f.payload }}</code></td>
+                <td class="evidence">{{ f.evidence }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <details class="results-section">
+        <summary>Vulnerable URLs</summary>
+        <ul class="result-list">
+            {% for f in findings %}
+            <li>
+                <span class="severity-badge severity-{{ f.severity }}">{{ f.type }}</span>
+                <code>{{ f.url }}</code>
+            </li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% else %}
+    <p class="no-results">No vulnerabilities found.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>⚠️ Disclaimer</h2>
+    <p class="disclaimer-text">
+        This tool is intended for <strong>authorized security testing only</strong>.
+        Only scan URLs that you have explicit permission to test.
+        Unauthorized scanning may violate laws and regulations.
+        The authors are not responsible for any misuse of this tool.
+    </p>
+</section>
+{% endblock %}

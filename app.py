@@ -3,10 +3,14 @@
 import logging
 import os
 import re
+from urllib.parse import urlparse
 
 from flask import Flask, render_template, request
 
 from dorker import ENGINES, search
+from dorkmaker import OPERATORS, TEMPLATES, build_query
+from crawler import crawl
+from scanner import scan_urls, test_sqli, test_xss, test_lfi
 
 app = Flask(__name__)
 
@@ -18,6 +22,10 @@ _VALID_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$")
 # Reject control characters in header values
 _INVALID_HEADER_VALUE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
+
+# ---------------------------------------------------------------------------
+# Search (original functionality)
+# ---------------------------------------------------------------------------
 
 @app.route("/", methods=["GET"])
 def index():
@@ -109,6 +117,193 @@ def do_search():
         proxy=proxy,
         headers=raw_headers,
         result_count=len(results),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dork Maker
+# ---------------------------------------------------------------------------
+
+@app.route("/dorkmaker", methods=["GET"])
+def dorkmaker():
+    """Render the dork maker page."""
+    return render_template(
+        "dorkmaker.html", operators=OPERATORS, templates=TEMPLATES,
+    )
+
+
+@app.route("/dorkmaker/build", methods=["POST"])
+def dorkmaker_build():
+    """Build a dork query from operator parts."""
+    operators_list = request.form.getlist("operator")
+    values_list = request.form.getlist("value")
+    negates_list = request.form.getlist("negate")
+
+    # Reconstruct parts for re-rendering the form
+    parts = []
+    negate_idx = 0
+    for i in range(len(values_list)):
+        op = operators_list[i] if i < len(operators_list) else ""
+        val = values_list[i] if i < len(values_list) else ""
+        # Checkbox negate: only present if checked, so we check field index
+        parts.append({"operator": op, "value": val, "negate": False})
+
+    # Handle negate checkboxes — they only appear in form data when checked
+    # Re-parse from raw form data to match checkbox positions
+    raw_data = request.form.to_dict(flat=False)
+    if "negate" in raw_data:
+        # Mark all parts as not negated, then find checked ones
+        # Since HTML checkboxes don't submit when unchecked, we use JS-injected
+        # hidden fields or simply assume all negates correspond to checked boxes.
+        # For simplicity: if negate values exist, they apply to first N parts.
+        for i, val in enumerate(raw_data.get("negate", [])):
+            if val == "1" and i < len(parts):
+                parts[i]["negate"] = True
+
+    query = build_query(parts)
+
+    return render_template(
+        "dorkmaker.html",
+        operators=OPERATORS,
+        templates=TEMPLATES,
+        query=query,
+        parts=parts,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Crawler
+# ---------------------------------------------------------------------------
+
+@app.route("/crawler", methods=["GET"])
+def crawler_page():
+    """Render the crawler page."""
+    return render_template("crawler.html")
+
+
+@app.route("/crawler/crawl", methods=["POST"])
+def do_crawl():
+    """Handle a crawl request."""
+    target_url = request.form.get("target_url", "").strip()
+    depth = request.form.get("depth", "2").strip()
+    proxy = request.form.get("proxy", "").strip()
+
+    errors = []
+
+    if not target_url:
+        errors.append("Target URL is required.")
+    else:
+        parsed = urlparse(target_url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            errors.append("Invalid URL. Must start with http:// or https://")
+
+    try:
+        depth = int(depth)
+        if depth < 1:
+            depth = 1
+        elif depth > 5:
+            depth = 5
+    except ValueError:
+        depth = 2
+
+    if errors:
+        return render_template(
+            "crawler.html",
+            errors=errors,
+            target_url=target_url,
+            depth=depth,
+            proxy=proxy,
+        )
+
+    crawl_results = crawl(target_url=target_url, depth=depth, proxy=proxy)
+
+    return render_template(
+        "crawler.html",
+        crawl_results=crawl_results,
+        target_url=target_url,
+        depth=depth,
+        proxy=proxy,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scanner
+# ---------------------------------------------------------------------------
+
+@app.route("/scanner", methods=["GET"])
+def scanner_page():
+    """Render the scanner page."""
+    return render_template("scanner.html")
+
+
+@app.route("/scanner/scan", methods=["POST"])
+def do_scan():
+    """Handle a vulnerability scan request."""
+    # URLs can come as a textarea (newline-separated) or as hidden fields
+    raw_urls = request.form.get("urls", "")
+    url_list = request.form.getlist("urls")
+    proxy = request.form.get("proxy", "").strip()
+    scan_sqli = request.form.get("scan_sqli") == "1"
+    scan_xss = request.form.get("scan_xss") == "1"
+    scan_lfi = request.form.get("scan_lfi") == "1"
+
+    # If urls came as a textarea (single string with newlines)
+    if len(url_list) == 1 and "\n" in url_list[0]:
+        url_list = [u.strip() for u in url_list[0].splitlines() if u.strip()]
+
+    # Default: if no scan types checked via form (e.g. coming from crawler), run all
+    if not scan_sqli and not scan_xss and not scan_lfi:
+        scan_sqli = scan_xss = scan_lfi = True
+
+    errors = []
+    valid_urls = []
+    for url in url_list:
+        url = url.strip()
+        if not url:
+            continue
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            errors.append(f"Invalid URL skipped: {url}")
+            continue
+        valid_urls.append(url)
+
+    if not valid_urls:
+        errors.append("At least one valid URL with parameters is required.")
+
+    if errors and not valid_urls:
+        return render_template(
+            "scanner.html",
+            errors=errors,
+            raw_urls=raw_urls,
+            proxy=proxy,
+            scan_sqli=scan_sqli,
+            scan_xss=scan_xss,
+            scan_lfi=scan_lfi,
+        )
+
+    # Run selected scans
+    findings = []
+    for url in valid_urls:
+        if scan_sqli:
+            findings.extend(test_sqli(url, proxy=proxy))
+        if scan_xss:
+            findings.extend(test_xss(url, proxy=proxy))
+        if scan_lfi:
+            findings.extend(test_lfi(url, proxy=proxy))
+
+    # Sort findings by severity
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    findings.sort(key=lambda f: severity_order.get(f.get("severity", "low"), 4))
+
+    return render_template(
+        "scanner.html",
+        findings=findings,
+        urls_scanned=len(valid_urls),
+        raw_urls="\n".join(valid_urls),
+        proxy=proxy,
+        scan_sqli=scan_sqli,
+        scan_xss=scan_xss,
+        scan_lfi=scan_lfi,
     )
 
 

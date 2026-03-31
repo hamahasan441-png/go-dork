@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Crawler &mdash; go-dork{% endblock %}
+
+{% block content %}
+<header>
+    <h1>URL Crawler</h1>
+    <p class="subtitle">Crawl target URLs to collect links and parameters</p>
+</header>
+
+<section class="card">
+    <form method="POST" action="{{ url_for('do_crawl') }}">
+        <div class="form-group">
+            <label for="target_url">Target URL</label>
+            <input
+                type="text"
+                id="target_url"
+                name="target_url"
+                placeholder="https://example.com"
+                value="{{ target_url or '' }}"
+                required
+            >
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="depth">Crawl Depth</label>
+                <input
+                    type="number"
+                    id="depth"
+                    name="depth"
+                    min="1"
+                    max="5"
+                    value="{{ depth or 2 }}"
+                >
+            </div>
+            <div class="form-group">
+                <label for="proxy">Proxy URL <small>(optional)</small></label>
+                <input
+                    type="text"
+                    id="proxy"
+                    name="proxy"
+                    placeholder="http://127.0.0.1:8080"
+                    value="{{ proxy or '' }}"
+                >
+            </div>
+        </div>
+
+        <button type="submit" class="btn-search">Crawl</button>
+    </form>
+</section>
+
+{% if crawl_results is defined %}
+<section class="card">
+    <h2>Crawl Results</h2>
+
+    <div class="stats-row">
+        <div class="stat-box">
+            <span class="stat-number">{{ crawl_results.all_urls | length }}</span>
+            <span class="stat-label">Internal URLs</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ crawl_results.param_urls | length }}</span>
+            <span class="stat-label">URLs with Params</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ crawl_results.form_urls | length }}</span>
+            <span class="stat-label">Form Actions</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ crawl_results.external_urls | length }}</span>
+            <span class="stat-label">External URLs</span>
+        </div>
+    </div>
+
+    {% if crawl_results.param_urls %}
+    <details class="results-section" open>
+        <summary>URLs with Parameters <span class="badge badge-accent">{{ crawl_results.param_urls | length }}</span></summary>
+        <ul class="result-list">
+            {% for url in crawl_results.param_urls %}
+            <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
+            {% endfor %}
+        </ul>
+        {% if crawl_results.param_urls %}
+        <form method="POST" action="{{ url_for('do_scan') }}" class="inline-form">
+            {% for url in crawl_results.param_urls %}
+            <input type="hidden" name="urls" value="{{ url }}">
+            {% endfor %}
+            <input type="hidden" name="proxy" value="{{ proxy or '' }}">
+            <button type="submit" class="btn-danger">Scan for Vulnerabilities →</button>
+        </form>
+        {% endif %}
+    </details>
+    {% endif %}
+
+    {% if crawl_results.all_urls %}
+    <details class="results-section">
+        <summary>All Internal URLs <span class="badge">{{ crawl_results.all_urls | length }}</span></summary>
+        <ul class="result-list">
+            {% for url in crawl_results.all_urls %}
+            <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% if crawl_results.form_urls %}
+    <details class="results-section">
+        <summary>Form Action URLs <span class="badge">{{ crawl_results.form_urls | length }}</span></summary>
+        <ul class="result-list">
+            {% for url in crawl_results.form_urls %}
+            <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% if crawl_results.external_urls %}
+    <details class="results-section">
+        <summary>External URLs <span class="badge">{{ crawl_results.external_urls | length }}</span></summary>
+        <ul class="result-list">
+            {% for url in crawl_results.external_urls %}
+            <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

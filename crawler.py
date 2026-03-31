@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse, parse_qs
 import requests
 from bs4 import BeautifulSoup
 
+from urlvalidation import is_safe_url
+
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 15
@@ -21,7 +23,14 @@ MAX_CRAWL_URLS = 200
 
 
 def _fetch(url: str, proxy: str = "") -> str:
-    """Fetch a URL and return the response text."""
+    """Fetch a URL and return the response text.
+
+    Validates the URL against internal/private network ranges to prevent SSRF.
+    """
+    if not is_safe_url(url):
+        logger.warning("Blocked request to potentially unsafe URL: %s", url)
+        return ""
+
     headers = {"User-Agent": _USER_AGENT}
     proxies = None
     if proxy:

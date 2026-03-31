@@ -11,6 +11,7 @@ from dorker import ENGINES, search
 from dorkmaker import OPERATORS, TEMPLATES, build_query
 from crawler import crawl
 from scanner import scan_urls, test_sqli, test_xss, test_lfi
+from urlvalidation import is_safe_url
 
 app = Flask(__name__)
 
@@ -182,6 +183,11 @@ def do_crawl():
         parsed = urlparse(target_url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             errors.append("Invalid URL. Must start with http:// or https://")
+        elif not is_safe_url(target_url):
+            errors.append(
+                "URL targets a private or internal network address. "
+                "Only public URLs are allowed."
+            )
 
     try:
         depth = int(depth)
@@ -250,6 +256,9 @@ def do_scan():
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             errors.append(f"Invalid URL skipped: {url}")
+            continue
+        if not is_safe_url(url):
+            errors.append(f"URL targets a private/internal address, skipped: {url}")
             continue
         valid_urls.append(url)
 

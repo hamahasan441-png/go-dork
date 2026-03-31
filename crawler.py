@@ -99,6 +99,7 @@ def crawl(
     external_urls: list[str] = []
 
     queue: list[tuple[str, int]] = [(target_url, 0)]
+    queued: set[str] = {target_url}
 
     while queue and len(visited) < MAX_CRAWL_URLS:
         current_url, current_depth = queue.pop(0)
@@ -133,7 +134,7 @@ def crawl(
             # Remove fragment
             clean_url = full_parsed._replace(fragment="").geturl()
 
-            if clean_url not in visited and clean_url not in {u for u, _ in queue}:
+            if clean_url not in visited and clean_url not in queued:
                 if _same_domain(clean_url, base_domain):
                     if clean_url not in all_urls:
                         all_urls.append(clean_url)
@@ -141,6 +142,7 @@ def crawl(
                         param_urls.append(clean_url)
                     if current_depth + 1 < depth:
                         queue.append((clean_url, current_depth + 1))
+                        queued.add(clean_url)
                 else:
                     if clean_url not in external_urls:
                         external_urls.append(clean_url)

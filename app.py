@@ -137,28 +137,14 @@ def dorkmaker_build():
     """Build a dork query from operator parts."""
     operators_list = request.form.getlist("operator")
     values_list = request.form.getlist("value")
-    negates_list = request.form.getlist("negate")
 
-    # Reconstruct parts for re-rendering the form
+    # Reconstruct parts — negate checkboxes use indexed names (negate_0, negate_1, ...)
     parts = []
-    negate_idx = 0
     for i in range(len(values_list)):
         op = operators_list[i] if i < len(operators_list) else ""
         val = values_list[i] if i < len(values_list) else ""
-        # Checkbox negate: only present if checked, so we check field index
-        parts.append({"operator": op, "value": val, "negate": False})
-
-    # Handle negate checkboxes — they only appear in form data when checked
-    # Re-parse from raw form data to match checkbox positions
-    raw_data = request.form.to_dict(flat=False)
-    if "negate" in raw_data:
-        # Mark all parts as not negated, then find checked ones
-        # Since HTML checkboxes don't submit when unchecked, we use JS-injected
-        # hidden fields or simply assume all negates correspond to checked boxes.
-        # For simplicity: if negate values exist, they apply to first N parts.
-        for i, val in enumerate(raw_data.get("negate", [])):
-            if val == "1" and i < len(parts):
-                parts[i]["negate"] = True
+        neg = request.form.get(f"negate_{i}") == "1"
+        parts.append({"operator": op, "value": val, "negate": neg})
 
     query = build_query(parts)
 

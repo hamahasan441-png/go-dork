@@ -80,7 +80,6 @@
             <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
             {% endfor %}
         </ul>
-        {% if crawl_results.param_urls %}
         <form method="POST" action="{{ url_for('do_scan') }}" class="inline-form">
             {% for url in crawl_results.param_urls %}
             <input type="hidden" name="urls" value="{{ url }}">
@@ -88,7 +87,6 @@
             <input type="hidden" name="proxy" value="{{ proxy or '' }}">
             <button type="submit" class="btn-danger">Scan for Vulnerabilities →</button>
         </form>
-        {% endif %}
     </details>
     {% endif %}
 

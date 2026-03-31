@@ -138,7 +138,10 @@ def test_sqli(url: str, proxy: str = "") -> list[dict]:
         return findings
 
     for param in params:
+        found = False
         for payload in SQLI_PAYLOADS:
+            if found:
+                break
             injected_url = _inject_param(url, param, payload)
             body = _fetch(injected_url, proxy=proxy)
             if not body:
@@ -154,10 +157,8 @@ def test_sqli(url: str, proxy: str = "") -> list[dict]:
                         "evidence": pattern.pattern,
                         "severity": "high",
                     })
-                    break  # One match per payload is enough
-            else:
-                continue
-            break  # Found a match for this param, move to next param
+                    found = True
+                    break
 
     return findings
 
@@ -180,10 +181,9 @@ def test_xss(url: str, proxy: str = "") -> list[dict]:
             if not body:
                 continue
 
-            # Check if our marker or full payload is reflected in the response
+            # Check if our marker is reflected in the response, then verify
+            # whether the full payload (with HTML tags) appears unescaped
             if XSS_MARKER in body:
-                # Check if the full tag/payload appears (not just the marker text
-                # which might be in a safe context)
                 reflected_raw = payload in body
                 findings.append({
                     "type": "XSS",
@@ -214,7 +214,10 @@ def test_lfi(url: str, proxy: str = "") -> list[dict]:
         return findings
 
     for param in params:
+        found = False
         for payload in LFI_PAYLOADS:
+            if found:
+                break
             injected_url = _inject_param(url, param, payload)
             body = _fetch(injected_url, proxy=proxy)
             if not body:
@@ -230,10 +233,8 @@ def test_lfi(url: str, proxy: str = "") -> list[dict]:
                         "evidence": pattern.pattern,
                         "severity": "critical",
                     })
+                    found = True
                     break
-            else:
-                continue
-            break  # Found a match for this param
 
     return findings
 

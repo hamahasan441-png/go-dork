@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Dork Maker &mdash; go-dork{% endblock %}
+
+{% block content %}
+<header>
+    <h1>Dork Maker</h1>
+    <p class="subtitle">Build advanced search engine dork queries</p>
+</header>
+
+<section class="card">
+    <h2>Query Builder</h2>
+    <form method="POST" action="{{ url_for('dorkmaker_build') }}" id="dork-builder">
+        <div id="operator-rows">
+            {% if parts %}
+                {% for part in parts %}
+                <div class="operator-row">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <select name="operator">
+                                <option value="" {% if not part.operator %}selected{% endif %}>Keyword (no operator)</option>
+                                {% for op, info in operators.items() %}
+                                <option value="{{ op }}" title="{{ info.description }}" {% if part.operator == op %}selected{% endif %}>{{ op }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 2">
+                            <input type="text" name="value" placeholder="Value" value="{{ part.value or '' }}">
+                        </div>
+                        <div class="form-group" style="flex: 0 0 auto">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="negate_{{ loop.index0 }}" value="1" {% if part.negate %}checked{% endif %}> NOT
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="operator-row">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <select name="operator">
+                                <option value="" selected>Keyword (no operator)</option>
+                                {% for op, info in operators.items() %}
+                                <option value="{{ op }}" title="{{ info.description }}">{{ op }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 2">
+                            <input type="text" name="value" placeholder="Value">
+                        </div>
+                        <div class="form-group" style="flex: 0 0 auto">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="negate_0" value="1"> NOT
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="addRow()">+ Add Operator</button>
+            <button type="submit" class="btn-search">Build Query</button>
+        </div>
+    </form>
+
+    {% if query %}
+    <div class="built-query">
+        <h3>Generated Query</h3>
+        <div class="query-output">
+            <code>{{ query }}</code>
+            <a href="{{ url_for('index') }}?prefill={{ query | urlencode }}" class="btn-small">Use in Search →</a>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2>Preset Templates</h2>
+    <div class="template-categories">
+        {% for category, dorks in templates.items() %}
+        <details class="template-category">
+            <summary>{{ category }} <span class="badge">{{ dorks | length }}</span></summary>
+            <ul class="template-list">
+                {% for dork in dorks %}
+                <li>
+                    <code>{{ dork }}</code>
+                    <a href="{{ url_for('index') }}?prefill={{ dork | urlencode }}" class="btn-small">Use →</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="card">
+    <h2>Operator Reference</h2>
+    <table class="ref-table">
+        <thead>
+            <tr><th>Operator</th><th>Description</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+            {% for op, info in operators.items() %}
+            <tr>
+                <td><code>{{ op }}</code></td>
+                <td>{{ info.description }}</td>
+                <td><code>{{ info.example }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<script>
+function addRow() {
+    const container = document.getElementById('operator-rows');
+    const rows = container.querySelectorAll('.operator-row');
+    const newIndex = rows.length;
+    const firstRow = rows[0];
+    const newRow = firstRow.cloneNode(true);
+    // Clear input values in the cloned row
+    newRow.querySelectorAll('input[type="text"]').forEach(input => input.value = '');
+    newRow.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.name = 'negate_' + newIndex;
+    });
+    newRow.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
+    container.appendChild(newRow);
+}
+</script>
+{% endblock %}

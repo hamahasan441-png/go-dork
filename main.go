@@ -47,6 +47,9 @@ func init() {
 		showBanner()
 		fmt.Fprintf(os.Stderr, "%s", aurora.Green(strings.Join(h, "\n")))
 	}
+}
+
+func main() {
 	flag.Parse()
 
 	engine = strings.ToLower(engine)
@@ -58,9 +61,7 @@ func init() {
 	log.DefaultLogger.SetMaxLevel(maxLog)
 
 	showBanner()
-}
 
-func main() {
 	if isStdin() {
 		sc := bufio.NewScanner(os.Stdin)
 		for sc.Scan() {

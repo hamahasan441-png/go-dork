@@ -1,6 +1,6 @@
 """Tests for scanner module — vulnerability detection (SQLi, XSS, LFI)."""
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -335,3 +335,79 @@ class TestPayloadIntegrity:
         import re
         for pattern in LFI_SUCCESS_PATTERNS:
             assert isinstance(pattern, re.Pattern)
+
+
+# ---------------------------------------------------------------------------
+# Scanner _fetch — SSRF protection
+# ---------------------------------------------------------------------------
+
+
+class TestScannerFetch:
+    @patch("scanner.is_safe_url")
+    def test_blocks_unsafe_url(self, mock_safe):
+        from scanner import _fetch
+        mock_safe.return_value = False
+        result = _fetch("http://127.0.0.1/admin?id=1")
+        assert result == ""
+
+    @patch("scanner.requests.get")
+    @patch("scanner.is_safe_url")
+    def test_with_proxy(self, mock_safe, mock_get):
+        from scanner import _fetch
+        mock_safe.return_value = True
+        mock_resp = MagicMock()
+        mock_resp.text = "response"
+        mock_get.return_value = mock_resp
+
+        result = _fetch("http://example.com/page?id=1", proxy="http://proxy:8080")
+        assert result == "response"
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["proxies"] is not None
+
+    @patch("scanner.requests.get")
+    @patch("scanner.is_safe_url")
+    def test_request_failure(self, mock_safe, mock_get):
+        import requests as req_lib
+        from scanner import _fetch
+        mock_safe.return_value = True
+        mock_get.side_effect = req_lib.RequestException("connection error")
+        result = _fetch("http://example.com/page?id=1")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# Additional XSS edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestXssEdgeCases:
+    @patch("scanner._fetch")
+    def test_xss_multiple_params(self, mock_fetch):
+        """Each parameter should be tested for XSS independently."""
+        mock_fetch.return_value = f"<html>{XSS_MARKER}</html>"
+        findings = xss_test("http://example.com/page?id=1&name=test")
+        params_found = {f["param"] for f in findings}
+        assert "id" in params_found
+        assert "name" in params_found
+
+    @patch("scanner._fetch")
+    def test_xss_stops_after_first_finding_per_param(self, mock_fetch):
+        mock_fetch.return_value = f"<html>{XSS_MARKER}</html>"
+        findings = xss_test("http://example.com/page?id=1")
+        id_findings = [f for f in findings if f["param"] == "id"]
+        assert len(id_findings) == 1
+
+
+# ---------------------------------------------------------------------------
+# Additional LFI edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestLfiEdgeCases:
+    @patch("scanner._fetch")
+    def test_lfi_multiple_params(self, mock_fetch):
+        mock_fetch.return_value = "root:x:0:0:root:/root:/bin/bash"
+        findings = lfi_test("http://example.com/page?file=test&path=other")
+        params_found = {f["param"] for f in findings}
+        assert "file" in params_found
+        assert "path" in params_found

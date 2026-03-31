@@ -221,3 +221,89 @@ class TestCrawl:
         assert isinstance(result["param_urls"], list)
         assert isinstance(result["form_urls"], list)
         assert isinstance(result["external_urls"], list)
+
+
+# ---------------------------------------------------------------------------
+# _fetch — SSRF protection and proxy handling
+# ---------------------------------------------------------------------------
+
+
+class TestFetch:
+    @patch("crawler.is_safe_url")
+    def test_blocks_unsafe_url(self, mock_safe):
+        """_fetch should return empty string for unsafe URLs."""
+        from crawler import _fetch
+        mock_safe.return_value = False
+        result = _fetch("http://127.0.0.1/admin")
+        assert result == ""
+
+    @patch("crawler.requests.get")
+    @patch("crawler.is_safe_url")
+    def test_passes_proxy(self, mock_safe, mock_get):
+        from crawler import _fetch
+        mock_safe.return_value = True
+        mock_resp = MagicMock()
+        mock_resp.text = "ok"
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        _fetch("http://example.com", proxy="http://proxy:8080")
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["proxies"] is not None
+        assert call_kwargs["headers"]["Connection"] == "close"
+
+    @patch("crawler.requests.get")
+    @patch("crawler.is_safe_url")
+    def test_request_failure_returns_empty(self, mock_safe, mock_get):
+        import requests as req_lib
+        from crawler import _fetch
+        mock_safe.return_value = True
+        mock_get.side_effect = req_lib.RequestException("timeout")
+        result = _fetch("http://example.com")
+        assert result == ""
+
+    @patch("crawler.requests.get")
+    @patch("crawler.is_safe_url")
+    def test_successful_fetch(self, mock_safe, mock_get):
+        from crawler import _fetch
+        mock_safe.return_value = True
+        mock_resp = MagicMock()
+        mock_resp.text = "<html>content</html>"
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        result = _fetch("http://example.com")
+        assert result == "<html>content</html>"
+
+
+# ---------------------------------------------------------------------------
+# Additional crawler edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestCrawlEdgeCases:
+    @patch("crawler._fetch")
+    def test_crawl_with_proxy(self, mock_fetch):
+        mock_fetch.return_value = '<a href="/page">Link</a>'
+        result = crawl("http://example.com", depth=1, proxy="http://proxy:8080")
+        assert isinstance(result, dict)
+        # Verify proxy was passed through
+        mock_fetch.assert_called_with("http://example.com", proxy="http://proxy:8080")
+
+    @patch("crawler._fetch")
+    def test_subdomain_links_included(self, mock_fetch):
+        mock_fetch.return_value = '<a href="http://sub.example.com/page">Sub</a>'
+        result = crawl("http://example.com", depth=1)
+        assert "http://sub.example.com/page" in result["all_urls"]
+
+    @patch("crawler._fetch")
+    def test_same_url_not_crawled_twice(self, mock_fetch):
+        """When the same URL appears multiple times, it should only be fetched once."""
+        mock_fetch.return_value = """
+        <a href="/page">Link</a>
+        <a href="/page">Link again</a>
+        """
+        result = crawl("http://example.com", depth=2)
+        # /page should appear once in all_urls
+        count = result["all_urls"].count("http://example.com/page")
+        assert count <= 1

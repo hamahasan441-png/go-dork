@@ -658,6 +658,20 @@ textarea {
     line-height: 1.7;
 }
 
+/* Export buttons */
+.export-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.export-buttons .btn-small {
+    cursor: pointer;
+    background: none;
+    font-family: inherit;
+}
+
 /* Footer */
 footer {
     text-align: center;

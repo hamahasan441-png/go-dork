@@ -9,6 +9,7 @@
 
 <section class="card">
     <form method="POST" action="{{ url_for('do_crawl') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="target_url">Target URL</label>
             <input
@@ -80,13 +81,28 @@
             <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></li>
             {% endfor %}
         </ul>
-        <form method="POST" action="{{ url_for('do_scan') }}" class="inline-form">
-            {% for url in crawl_results.param_urls %}
-            <input type="hidden" name="urls" value="{{ url }}">
-            {% endfor %}
-            <input type="hidden" name="proxy" value="{{ proxy or '' }}">
-            <button type="submit" class="btn-danger">Scan for Vulnerabilities →</button>
-        </form>
+        <div class="inline-form">
+            <form method="POST" action="{{ url_for('do_scan') }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% for url in crawl_results.param_urls %}
+                <input type="hidden" name="urls" value="{{ url }}">
+                {% endfor %}
+                <input type="hidden" name="proxy" value="{{ proxy or '' }}">
+                <button type="submit" class="btn-danger">Scan for Vulnerabilities →</button>
+            </form>
+            <form method="POST" action="{{ url_for('export_crawl') }}" style="display:inline">
+                {% for url in crawl_results.param_urls %}<input type="hidden" name="url" value="{{ url }}">{% endfor %}
+                <input type="hidden" name="category" value="param_urls">
+                <input type="hidden" name="format" value="json">
+                <button type="submit" class="btn-small">Export JSON</button>
+            </form>
+            <form method="POST" action="{{ url_for('export_crawl') }}" style="display:inline">
+                {% for url in crawl_results.param_urls %}<input type="hidden" name="url" value="{{ url }}">{% endfor %}
+                <input type="hidden" name="category" value="param_urls">
+                <input type="hidden" name="format" value="csv">
+                <button type="submit" class="btn-small">Export CSV</button>
+            </form>
+        </div>
     </details>
     {% endif %}
 

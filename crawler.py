@@ -1,7 +1,9 @@
 """URL crawler that collects links and parameterized URLs from target pages."""
 
 import logging
+import os
 import re
+import time
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import requests
@@ -11,7 +13,8 @@ from urlvalidation import is_safe_url
 
 logger = logging.getLogger(__name__)
 
-REQUEST_TIMEOUT = 15
+REQUEST_TIMEOUT = int(os.environ.get("GODORK_REQUEST_TIMEOUT", "15"))
+MAX_RETRIES = int(os.environ.get("GODORK_MAX_RETRIES", "3"))
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -19,11 +22,11 @@ _USER_AGENT = (
 )
 
 # Maximum number of URLs to crawl from a single target to avoid runaway crawling
-MAX_CRAWL_URLS = 200
+MAX_CRAWL_URLS = int(os.environ.get("GODORK_MAX_CRAWL_URLS", "200"))
 
 
 def _fetch(url: str, proxy: str = "") -> str:
-    """Fetch a URL and return the response text.
+    """Fetch a URL with retry logic and return the response text.
 
     Validates the URL against internal/private network ranges to prevent SSRF.
     """
@@ -37,15 +40,25 @@ def _fetch(url: str, proxy: str = "") -> str:
         proxies = {"http": proxy, "https": proxy}
         headers["Connection"] = "close"
 
-    try:
-        resp = requests.get(
-            url, headers=headers, proxies=proxies, timeout=REQUEST_TIMEOUT
-        )
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as exc:
-        logger.error("Crawler request failed for %s: %s", url, exc)
-        return ""
+    last_exc = None
+    for attempt in range(MAX_RETRIES):
+        if attempt > 0:
+            backoff = 2 ** attempt
+            logger.info("Crawler retry %d/%d after %ds for %s", attempt, MAX_RETRIES - 1, backoff, url)
+            time.sleep(backoff)
+
+        try:
+            resp = requests.get(
+                url, headers=headers, proxies=proxies, timeout=REQUEST_TIMEOUT
+            )
+            resp.raise_for_status()
+            return resp.text
+        except requests.RequestException as exc:
+            logger.error("Crawler request failed for %s (attempt %d): %s", url, attempt + 1, exc)
+            last_exc = exc
+
+    logger.error("All %d crawler attempts failed for %s: %s", MAX_RETRIES, url, last_exc)
+    return ""
 
 
 def _same_domain(url: str, base_domain: str) -> bool:

@@ -1,19 +1,39 @@
 """Flask web application for go-dork search engine dorking tool."""
 
+import csv
+import io
+import json
 import logging
 import os
 import re
+import secrets
 from urllib.parse import urlparse
 
-from flask import Flask, render_template, request
+from dotenv import load_dotenv
+from flask import Flask, Response, render_template, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 
 from dorker import ENGINES, search
 from dorkmaker import OPERATORS, TEMPLATES, build_query
 from crawler import crawl
-from scanner import scan_urls, test_sqli, test_xss, test_lfi
+from scanner import scan_urls, test_sqli, test_xss, test_lfi, test_open_redirect
 from urlvalidation import is_safe_url
 
+load_dotenv()
+
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+app.config["WTF_CSRF_TIME_LIMIT"] = None  # No expiry for CSRF tokens
+
+csrf = CSRFProtect(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per hour"],
+    storage_uri="memory://",
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +42,25 @@ logger = logging.getLogger(__name__)
 _VALID_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$")
 # Reject control characters in header values
 _INVALID_HEADER_VALUE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+@app.after_request
+def set_security_headers(response: Response) -> Response:
+    """Add security headers to all responses."""
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +74,7 @@ def index():
 
 
 @app.route("/search", methods=["POST"])
+@limiter.limit("30 per minute")
 def do_search():
     """Handle a search request and display results."""
     query = request.form.get("query", "").strip()
@@ -122,6 +162,98 @@ def do_search():
 
 
 # ---------------------------------------------------------------------------
+# Export endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/export/search", methods=["POST"])
+@csrf.exempt
+@limiter.limit("60 per minute")
+def export_search():
+    """Export search results as JSON, CSV, or plain text."""
+    urls = request.form.getlist("url")
+    fmt = request.form.get("format", "json").strip().lower()
+    return _export_urls(urls, fmt, "search_results")
+
+
+@app.route("/export/crawl", methods=["POST"])
+@csrf.exempt
+@limiter.limit("60 per minute")
+def export_crawl():
+    """Export crawl results as JSON, CSV, or plain text."""
+    urls = request.form.getlist("url")
+    category = request.form.get("category", "all_urls")
+    fmt = request.form.get("format", "json").strip().lower()
+    return _export_urls(urls, fmt, f"crawl_{category}")
+
+
+@app.route("/export/scan", methods=["POST"])
+@csrf.exempt
+@limiter.limit("60 per minute")
+def export_scan():
+    """Export scan findings as JSON or CSV."""
+    raw = request.form.get("findings_json", "[]")
+    fmt = request.form.get("format", "json").strip().lower()
+    try:
+        findings = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        findings = []
+
+    if fmt == "csv":
+        si = io.StringIO()
+        writer = csv.DictWriter(
+            si, fieldnames=["type", "severity", "param", "payload", "evidence", "url"]
+        )
+        writer.writeheader()
+        for f in findings:
+            writer.writerow({
+                "type": f.get("type", ""),
+                "severity": f.get("severity", ""),
+                "param": f.get("param", ""),
+                "payload": f.get("payload", ""),
+                "evidence": f.get("evidence", ""),
+                "url": f.get("url", ""),
+            })
+        return Response(
+            si.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=scan_findings.csv"},
+        )
+
+    return Response(
+        json.dumps(findings, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=scan_findings.json"},
+    )
+
+
+def _export_urls(urls: list[str], fmt: str, filename: str) -> Response:
+    """Generate a downloadable response for a list of URLs."""
+    if fmt == "csv":
+        si = io.StringIO()
+        writer = csv.writer(si)
+        writer.writerow(["url"])
+        for u in urls:
+            writer.writerow([u])
+        return Response(
+            si.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
+        )
+    if fmt == "txt":
+        return Response(
+            "\n".join(urls),
+            mimetype="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={filename}.txt"},
+        )
+    # Default: JSON
+    return Response(
+        json.dumps(urls, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}.json"},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dork Maker
 # ---------------------------------------------------------------------------
 
@@ -134,6 +266,7 @@ def dorkmaker():
 
 
 @app.route("/dorkmaker/build", methods=["POST"])
+@limiter.limit("60 per minute")
 def dorkmaker_build():
     """Build a dork query from operator parts."""
     operators_list = request.form.getlist("operator")
@@ -169,6 +302,7 @@ def crawler_page():
 
 
 @app.route("/crawler/crawl", methods=["POST"])
+@limiter.limit("10 per minute")
 def do_crawl():
     """Handle a crawl request."""
     target_url = request.form.get("target_url", "").strip()
@@ -229,6 +363,7 @@ def scanner_page():
 
 
 @app.route("/scanner/scan", methods=["POST"])
+@limiter.limit("5 per minute")
 def do_scan():
     """Handle a vulnerability scan request."""
     # URLs can come as a textarea (newline-separated) or as hidden fields
@@ -238,14 +373,15 @@ def do_scan():
     scan_sqli = request.form.get("scan_sqli") == "1"
     scan_xss = request.form.get("scan_xss") == "1"
     scan_lfi = request.form.get("scan_lfi") == "1"
+    scan_redirect = request.form.get("scan_redirect") == "1"
 
     # If urls came as a textarea (single string with newlines)
     if len(url_list) == 1 and "\n" in url_list[0]:
         url_list = [u.strip() for u in url_list[0].splitlines() if u.strip()]
 
     # Default: if no scan types checked via form (e.g. coming from crawler), run all
-    if not scan_sqli and not scan_xss and not scan_lfi:
-        scan_sqli = scan_xss = scan_lfi = True
+    if not scan_sqli and not scan_xss and not scan_lfi and not scan_redirect:
+        scan_sqli = scan_xss = scan_lfi = scan_redirect = True
 
     errors = []
     valid_urls = []
@@ -274,6 +410,7 @@ def do_scan():
             scan_sqli=scan_sqli,
             scan_xss=scan_xss,
             scan_lfi=scan_lfi,
+            scan_redirect=scan_redirect,
         )
 
     # Run selected scans
@@ -285,6 +422,8 @@ def do_scan():
             findings.extend(test_xss(url, proxy=proxy))
         if scan_lfi:
             findings.extend(test_lfi(url, proxy=proxy))
+        if scan_redirect:
+            findings.extend(test_open_redirect(url, proxy=proxy))
 
     # Sort findings by severity
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -293,12 +432,14 @@ def do_scan():
     return render_template(
         "scanner.html",
         findings=findings,
+        findings_json=json.dumps(findings),
         urls_scanned=len(valid_urls),
         raw_urls="\n".join(valid_urls),
         proxy=proxy,
         scan_sqli=scan_sqli,
         scan_xss=scan_xss,
         scan_lfi=scan_lfi,
+        scan_redirect=scan_redirect,
     )
 
 

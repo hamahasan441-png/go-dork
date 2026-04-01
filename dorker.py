@@ -1,12 +1,15 @@
 """Core dorking/search engine scraping logic using BeautifulSoup."""
 
 import logging
+import os
+import time
 from urllib.parse import unquote, urlparse, parse_qs
 
 import requests
 from bs4 import BeautifulSoup
 
-REQUEST_TIMEOUT = 15
+REQUEST_TIMEOUT = int(os.environ.get("GODORK_REQUEST_TIMEOUT", "15"))
+MAX_RETRIES = int(os.environ.get("GODORK_MAX_RETRIES", "3"))
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +172,7 @@ def _make_request(
     headers: dict | None = None,
     method: str = "GET",
 ) -> str:
-    """Make an HTTP request and return the response text."""
+    """Make an HTTP request with retry logic and return the response text."""
     req_headers = {"User-Agent": _DEFAULT_USER_AGENT}
     if headers:
         req_headers.update(headers)
@@ -179,28 +182,52 @@ def _make_request(
         proxies = {"http": proxy, "https": proxy}
         req_headers["Connection"] = "close"
 
-    try:
-        if method.upper() == "POST":
-            resp = requests.post(
-                url,
-                data=params,
-                headers=req_headers,
-                proxies=proxies,
-                timeout=REQUEST_TIMEOUT,
-            )
-        else:
-            resp = requests.get(
-                url,
-                params=params,
-                headers=req_headers,
-                proxies=proxies,
-                timeout=REQUEST_TIMEOUT,
-            )
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as exc:
-        logger.error("Request failed: %s", exc)
-        return ""
+    last_exc = None
+    for attempt in range(MAX_RETRIES):
+        if attempt > 0:
+            backoff = 2 ** attempt
+            logger.info("Retry %d/%d after %ds for %s", attempt, MAX_RETRIES - 1, backoff, url)
+            time.sleep(backoff)
+
+        try:
+            if method.upper() == "POST":
+                resp = requests.post(
+                    url,
+                    data=params,
+                    headers=req_headers,
+                    proxies=proxies,
+                    timeout=REQUEST_TIMEOUT,
+                )
+            else:
+                resp = requests.get(
+                    url,
+                    params=params,
+                    headers=req_headers,
+                    proxies=proxies,
+                    timeout=REQUEST_TIMEOUT,
+                )
+
+            # Detect captcha / rate-limit responses
+            if resp.status_code == 429:
+                logger.warning("Rate limited (HTTP 429) from %s", url)
+                last_exc = requests.HTTPError("Rate limited (HTTP 429)")
+                continue
+
+            if resp.status_code == 503:
+                body_lower = resp.text.lower()
+                if "captcha" in body_lower or "unusual traffic" in body_lower:
+                    logger.warning("Captcha/bot detection triggered at %s", url)
+                    last_exc = requests.HTTPError("Captcha/bot detection triggered")
+                    continue
+
+            resp.raise_for_status()
+            return resp.text
+        except requests.RequestException as exc:
+            logger.error("Request failed (attempt %d): %s", attempt + 1, exc)
+            last_exc = exc
+
+    logger.error("All %d attempts failed for %s: %s", MAX_RETRIES, url, last_exc)
+    return ""
 
 
 # ---------------------------------------------------------------------------

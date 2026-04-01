@@ -139,7 +139,7 @@ def crawl(
         target_url: The starting URL to crawl.
         depth: How many levels deep to crawl (1 = only the target page).
         proxy: Optional proxy URL.
-        respect_robots: When True, fetch and honour the site's robots.txt.
+        respect_robots: When True, fetch and honor the site's robots.txt.
         use_sitemap: When True, discover extra URLs from sitemap.xml.
 
     Returns:

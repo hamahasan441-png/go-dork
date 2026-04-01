@@ -101,6 +101,34 @@ def _extract_ask(soup: BeautifulSoup) -> list[str]:
     return urls
 
 
+def _extract_startpage(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from a Startpage search page."""
+    urls: list[str] = []
+    for a_tag in soup.select("a.w-gl__result-url[href]"):
+        urls.append(a_tag["href"])
+    # Fallback: broader result link selector
+    if not urls:
+        for a_tag in soup.select(".w-gl__result a[href]"):
+            href = a_tag["href"]
+            if href.startswith("http"):
+                urls.append(href)
+    return urls
+
+
+def _extract_brave(soup: BeautifulSoup) -> list[str]:
+    """Extract result URLs from a Brave Search page."""
+    urls: list[str] = []
+    for a_tag in soup.select("a.result-header[href]"):
+        urls.append(a_tag["href"])
+    # Fallback: look for data-href in result snippets
+    if not urls:
+        for div in soup.select(".snippet[data-pos]"):
+            a_tag = div.find("a", href=True)
+            if a_tag and a_tag["href"].startswith("http"):
+                urls.append(a_tag["href"])
+    return urls
+
+
 # ---------------------------------------------------------------------------
 # Engine configurations
 # ---------------------------------------------------------------------------
@@ -148,6 +176,20 @@ ENGINES = {
         "supports_pagination": True,
         "method": "GET",
     },
+    "startpage": {
+        "base_url": "https://www.startpage.com/sp/search",
+        "extract": _extract_startpage,
+        "build_params": lambda query, page: {"query": query, "page": str(page + 1)},
+        "supports_pagination": True,
+        "method": "POST",
+    },
+    "brave": {
+        "base_url": "https://search.brave.com/search",
+        "extract": _extract_brave,
+        "build_params": lambda query, page: {"q": query, "offset": str(page)},
+        "supports_pagination": True,
+        "method": "GET",
+    },
 }
 
 
@@ -171,6 +213,7 @@ def _make_request(
     proxy: str = "",
     headers: dict | None = None,
     method: str = "GET",
+    session: requests.Session | None = None,
 ) -> str:
     """Make an HTTP request with retry logic and return the response text."""
     req_headers = {"User-Agent": _DEFAULT_USER_AGENT}
@@ -182,6 +225,8 @@ def _make_request(
         proxies = {"http": proxy, "https": proxy}
         req_headers["Connection"] = "close"
 
+    http = session or requests
+
     last_exc = None
     for attempt in range(MAX_RETRIES):
         if attempt > 0:
@@ -191,7 +236,7 @@ def _make_request(
 
         try:
             if method.upper() == "POST":
-                resp = requests.post(
+                resp = http.post(
                     url,
                     data=params,
                     headers=req_headers,
@@ -199,7 +244,7 @@ def _make_request(
                     timeout=REQUEST_TIMEOUT,
                 )
             else:
-                resp = requests.get(
+                resp = http.get(
                     url,
                     params=params,
                     headers=req_headers,
@@ -270,29 +315,35 @@ def search(
 
     max_pages = 1 if not cfg["supports_pagination"] else max(1, pages)
 
-    for page in range(max_pages):
-        params = cfg["build_params"](query, page)
-        html = _make_request(
-            cfg["base_url"],
-            params,
-            proxy=proxy,
-            headers=headers,
-            method=cfg.get("method", "GET"),
-        )
-        if not html:
-            break
+    # Use a session for connection pooling across pages
+    session = requests.Session()
+    try:
+        for page in range(max_pages):
+            params = cfg["build_params"](query, page)
+            html = _make_request(
+                cfg["base_url"],
+                params,
+                proxy=proxy,
+                headers=headers,
+                method=cfg.get("method", "GET"),
+                session=session,
+            )
+            if not html:
+                break
 
-        soup = BeautifulSoup(html, "html.parser")
-        matches = cfg["extract"](soup)
-        if not matches:
-            break
+            soup = BeautifulSoup(html, "html.parser")
+            matches = cfg["extract"](soup)
+            if not matches:
+                break
 
-        for url in matches:
-            url = unquote(url)
-            if not _is_valid_url(url):
-                continue
-            if url not in seen:
-                seen.add(url)
-                results.append(url)
+            for url in matches:
+                url = unquote(url)
+                if not _is_valid_url(url):
+                    continue
+                if url not in seen:
+                    seen.add(url)
+                    results.append(url)
+    finally:
+        session.close()
 
     return results

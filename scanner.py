@@ -330,17 +330,31 @@ def scan_url(url: str, proxy: str = "") -> list[dict]:
     return findings
 
 
-def scan_urls(urls: list[str], proxy: str = "") -> list[dict]:
+def scan_urls(urls: list[str], proxy: str = "", max_workers: int = 4) -> list[dict]:
     """
-    Scan multiple URLs for vulnerabilities.
+    Scan multiple URLs for vulnerabilities concurrently.
+
+    Args:
+        urls: List of URLs to scan.
+        proxy: Optional proxy URL.
+        max_workers: Number of concurrent workers (default: 4).
 
     Returns a combined list of all findings across all URLs.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     all_findings = []
-    for url in urls:
+
+    def _scan_one(url: str) -> list[dict]:
         try:
-            results = scan_url(url, proxy=proxy)
-            all_findings.extend(results)
+            return scan_url(url, proxy=proxy)
         except Exception as exc:
             logger.error("Error scanning %s: %s", url, exc)
+            return []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_scan_one, url): url for url in urls}
+        for future in as_completed(futures):
+            all_findings.extend(future.result())
+
     return all_findings

@@ -308,6 +308,8 @@ def do_crawl():
     target_url = request.form.get("target_url", "").strip()
     depth = request.form.get("depth", "2").strip()
     proxy = request.form.get("proxy", "").strip()
+    respect_robots = request.form.get("respect_robots") == "1"
+    use_sitemap = request.form.get("use_sitemap") == "1"
 
     errors = []
 
@@ -339,9 +341,17 @@ def do_crawl():
             target_url=target_url,
             depth=depth,
             proxy=proxy,
+            respect_robots=respect_robots,
+            use_sitemap=use_sitemap,
         )
 
-    crawl_results = crawl(target_url=target_url, depth=depth, proxy=proxy)
+    crawl_results = crawl(
+        target_url=target_url,
+        depth=depth,
+        proxy=proxy,
+        respect_robots=respect_robots,
+        use_sitemap=use_sitemap,
+    )
 
     return render_template(
         "crawler.html",
@@ -349,6 +359,8 @@ def do_crawl():
         target_url=target_url,
         depth=depth,
         proxy=proxy,
+        respect_robots=respect_robots,
+        use_sitemap=use_sitemap,
     )
 
 

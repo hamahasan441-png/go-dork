@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_DEBUG=0
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-change-me-to-a-random-secret}
+      - GODORK_REQUEST_TIMEOUT=${GODORK_REQUEST_TIMEOUT:-15}
+      - GODORK_MAX_RETRIES=${GODORK_MAX_RETRIES:-3}
+      - GODORK_MAX_CRAWL_URLS=${GODORK_MAX_CRAWL_URLS:-200}
+    restart: unless-stopped

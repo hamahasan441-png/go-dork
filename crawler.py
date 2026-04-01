@@ -1,7 +1,10 @@
 """URL crawler that collects links and parameterized URLs from target pages."""
 
 import logging
+import os
 import re
+import time
+import urllib.robotparser
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import requests
@@ -11,7 +14,8 @@ from urlvalidation import is_safe_url
 
 logger = logging.getLogger(__name__)
 
-REQUEST_TIMEOUT = 15
+REQUEST_TIMEOUT = int(os.environ.get("GODORK_REQUEST_TIMEOUT", "15"))
+MAX_RETRIES = int(os.environ.get("GODORK_MAX_RETRIES", "3"))
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -19,11 +23,11 @@ _USER_AGENT = (
 )
 
 # Maximum number of URLs to crawl from a single target to avoid runaway crawling
-MAX_CRAWL_URLS = 200
+MAX_CRAWL_URLS = int(os.environ.get("GODORK_MAX_CRAWL_URLS", "200"))
 
 
 def _fetch(url: str, proxy: str = "") -> str:
-    """Fetch a URL and return the response text.
+    """Fetch a URL with retry logic and return the response text.
 
     Validates the URL against internal/private network ranges to prevent SSRF.
     """
@@ -37,15 +41,25 @@ def _fetch(url: str, proxy: str = "") -> str:
         proxies = {"http": proxy, "https": proxy}
         headers["Connection"] = "close"
 
-    try:
-        resp = requests.get(
-            url, headers=headers, proxies=proxies, timeout=REQUEST_TIMEOUT
-        )
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as exc:
-        logger.error("Crawler request failed for %s: %s", url, exc)
-        return ""
+    last_exc = None
+    for attempt in range(MAX_RETRIES):
+        if attempt > 0:
+            backoff = 2 ** attempt
+            logger.info("Crawler retry %d/%d after %ds for %s", attempt, MAX_RETRIES - 1, backoff, url)
+            time.sleep(backoff)
+
+        try:
+            resp = requests.get(
+                url, headers=headers, proxies=proxies, timeout=REQUEST_TIMEOUT
+            )
+            resp.raise_for_status()
+            return resp.text
+        except requests.RequestException as exc:
+            logger.error("Crawler request failed for %s (attempt %d): %s", url, attempt + 1, exc)
+            last_exc = exc
+
+    logger.error("All %d crawler attempts failed for %s: %s", MAX_RETRIES, url, last_exc)
+    return ""
 
 
 def _same_domain(url: str, base_domain: str) -> bool:
@@ -78,10 +92,45 @@ def _extract_form_urls(soup: BeautifulSoup, base_url: str) -> list[str]:
     return urls
 
 
+def _parse_robots_txt(robots_text: str, base_url: str) -> urllib.robotparser.RobotFileParser:
+    """Parse robots.txt content and return a RobotFileParser instance."""
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url(f"{base_url}/robots.txt")
+    rp.parse(robots_text.splitlines())
+    return rp
+
+
+def _extract_sitemap_urls_from_robots(robots_text: str) -> list[str]:
+    """Extract Sitemap URLs declared in robots.txt."""
+    urls = []
+    for line in robots_text.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("sitemap:"):
+            url = stripped.split(":", 1)[1].strip()
+            if url:
+                urls.append(url)
+    return urls
+
+
+def _parse_sitemap(sitemap_text: str) -> list[str]:
+    """Parse sitemap XML and extract URLs from <loc> tags."""
+    if not sitemap_text:
+        return []
+    soup = BeautifulSoup(sitemap_text, "html.parser")
+    urls = []
+    for loc in soup.find_all("loc"):
+        url = loc.get_text(strip=True)
+        if url:
+            urls.append(url)
+    return urls
+
+
 def crawl(
     target_url: str,
     depth: int = 2,
     proxy: str = "",
+    respect_robots: bool = False,
+    use_sitemap: bool = False,
 ) -> dict:
     """
     Crawl a target URL and collect links.
@@ -90,6 +139,8 @@ def crawl(
         target_url: The starting URL to crawl.
         depth: How many levels deep to crawl (1 = only the target page).
         proxy: Optional proxy URL.
+        respect_robots: When True, fetch and honor the site's robots.txt.
+        use_sitemap: When True, discover extra URLs from sitemap.xml.
 
     Returns:
         A dict with keys:
@@ -100,6 +151,7 @@ def crawl(
     """
     parsed_base = urlparse(target_url)
     base_domain = parsed_base.netloc.lower().split(":")[0]
+    base_origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
 
     visited: set[str] = set()
     all_urls: list[str] = []
@@ -110,6 +162,40 @@ def crawl(
     queue: list[tuple[str, int]] = [(target_url, 0)]
     queued: set[str] = {target_url}
 
+    robot_parser: urllib.robotparser.RobotFileParser | None = None
+
+    # --- Pre-crawl: robots.txt and sitemap handling ---
+    if respect_robots or use_sitemap:
+        robots_url = f"{base_origin}/robots.txt"
+        robots_text = _fetch(robots_url, proxy=proxy)
+
+        if respect_robots and robots_text:
+            robot_parser = _parse_robots_txt(robots_text, base_origin)
+
+        if use_sitemap:
+            sitemap_locations: list[str] = [f"{base_origin}/sitemap.xml"]
+            if robots_text:
+                for smap_url in _extract_sitemap_urls_from_robots(robots_text):
+                    if smap_url not in sitemap_locations:
+                        sitemap_locations.append(smap_url)
+
+            for sitemap_url in sitemap_locations:
+                sitemap_text = _fetch(sitemap_url, proxy=proxy)
+                for url in _parse_sitemap(sitemap_text):
+                    url_parsed = urlparse(url)
+                    clean_url = url_parsed._replace(fragment="").geturl()
+                    if clean_url in queued:
+                        continue
+                    if robot_parser and not robot_parser.can_fetch(_USER_AGENT, clean_url):
+                        continue
+                    if _same_domain(clean_url, base_domain):
+                        if clean_url not in all_urls:
+                            all_urls.append(clean_url)
+                        if _has_params(clean_url) and clean_url not in param_urls:
+                            param_urls.append(clean_url)
+                        queue.append((clean_url, 0))
+                        queued.add(clean_url)
+
     while queue and len(visited) < MAX_CRAWL_URLS:
         current_url, current_depth = queue.pop(0)
 
@@ -119,6 +205,10 @@ def crawl(
 
         if normalized in visited:
             continue
+
+        if robot_parser and not robot_parser.can_fetch(_USER_AGENT, normalized):
+            continue
+
         visited.add(normalized)
 
         html = _fetch(current_url, proxy=proxy)
@@ -144,6 +234,8 @@ def crawl(
             clean_url = full_parsed._replace(fragment="").geturl()
 
             if clean_url not in visited and clean_url not in queued:
+                if robot_parser and not robot_parser.can_fetch(_USER_AGENT, clean_url):
+                    continue
                 if _same_domain(clean_url, base_domain):
                     if clean_url not in all_urls:
                         all_urls.append(clean_url)

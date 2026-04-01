@@ -8,6 +8,7 @@
 </header>
 
 <form method="POST" action="{{ url_for('do_search') }}" class="search-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
         <label for="query">Dork Query</label>
         <input
@@ -77,6 +78,23 @@
 <section class="results">
     <h2>Results <span class="result-count">({{ result_count }})</span></h2>
     {% if results %}
+    <div class="export-buttons">
+        <form method="POST" action="{{ url_for('export_search') }}" style="display:inline">
+            {% for url in results %}<input type="hidden" name="url" value="{{ url }}">{% endfor %}
+            <input type="hidden" name="format" value="json">
+            <button type="submit" class="btn-small">Export JSON</button>
+        </form>
+        <form method="POST" action="{{ url_for('export_search') }}" style="display:inline">
+            {% for url in results %}<input type="hidden" name="url" value="{{ url }}">{% endfor %}
+            <input type="hidden" name="format" value="csv">
+            <button type="submit" class="btn-small">Export CSV</button>
+        </form>
+        <form method="POST" action="{{ url_for('export_search') }}" style="display:inline">
+            {% for url in results %}<input type="hidden" name="url" value="{{ url }}">{% endfor %}
+            <input type="hidden" name="format" value="txt">
+            <button type="submit" class="btn-small">Export TXT</button>
+        </form>
+    </div>
     <ul class="result-list">
         {% for url in results %}
         <li>

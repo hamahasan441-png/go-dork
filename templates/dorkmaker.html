@@ -10,6 +10,7 @@
 <section class="card">
     <h2>Query Builder</h2>
     <form method="POST" action="{{ url_for('dorkmaker_build') }}" id="dork-builder">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div id="operator-rows">
             {% if parts %}
                 {% for part in parts %}

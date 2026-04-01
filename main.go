@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/logrusorgru/aurora/v3"
 	log "github.com/projectdiscovery/gologger"
@@ -32,6 +33,12 @@ func init() {
 	flag.BoolVar(&silent, "s", false, "")
 	flag.BoolVar(&silent, "silent", false, "")
 
+	flag.IntVar(&timeout, "t", 30, "")
+	flag.IntVar(&timeout, "timeout", 30, "")
+
+	flag.IntVar(&delay, "d", 0, "")
+	flag.IntVar(&delay, "delay", 0, "")
+
 	flag.Usage = func() {
 		h := []string{
 			"Options:",
@@ -41,6 +48,8 @@ func init() {
 			"  -p, --page <i>               Specify number of pages (default: 1)",
 			"  -H, --header <header>        Pass custom header to search engine",
 			"  -x, --proxy <proxy_url>      Use proxy to surfing (HTTP/SOCKSv5 proxy)",
+			"  -t, --timeout <seconds>      HTTP request timeout in seconds (default: 30)",
+			"  -d, --delay <ms>             Delay between requests in milliseconds (default: 0)",
 			"  -s, --silent                 Silent mode",
 			"\n",
 		}
@@ -53,6 +62,11 @@ func main() {
 	flag.Parse()
 
 	engine = strings.ToLower(engine)
+
+	// Apply timeout to HTTP client
+	if timeout > 0 {
+		client.Timeout = time.Duration(timeout) * time.Second
+	}
 
 	maxLog := levels.LevelDebug
 	if silent {
@@ -85,7 +99,7 @@ func main() {
 	if len(headers) > 0 {
 		log.Info().Msgf("Header: [%+v]", headers)
 	}
-	log.Info().Msgf("Engine: %s", strings.Title(engine))
+	log.Info().Msgf("Engine: %s", strings.ToUpper(engine[:1])+engine[1:])
 	log.Warning().Msg("Use at your own risk! Developers assume no responsibility...")
 	log.Warning().Msg("If your IP address has been blocked by search engine providers or other reason.\n\n")
 
@@ -99,6 +113,7 @@ func main() {
 				Page:    page,
 				Proxy:   proxy,
 				Headers: headers,
+				Delay:   delay,
 			}
 
 			fatal, err := opts.search()

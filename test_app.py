@@ -11,8 +11,13 @@ from app import app
 def client():
     """Flask test client."""
     app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False
+    # Disable rate limiter in tests
+    from app import limiter
+    limiter.enabled = False
     with app.test_client() as c:
         yield c
+    limiter.enabled = True
 
 
 # ---------------------------------------------------------------------------

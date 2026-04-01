@@ -34,5 +34,22 @@
             <p>go-dork v1.0.1 &mdash; Originally by <a href="https://github.com/dwisiswant0" target="_blank">@dwisiswant0</a></p>
         </footer>
     </div>
+
+    <script>
+    // Loading spinner for form submissions
+    document.querySelectorAll('form').forEach(function(form) {
+        // Skip export forms (they download files, not navigate)
+        if (form.action && (form.action.includes('/export/') || form.style.display === 'inline')) return;
+        form.addEventListener('submit', function() {
+            var btn = form.querySelector('button[type="submit"]');
+            if (btn && !btn.classList.contains('btn-small')) {
+                btn.disabled = true;
+                btn.dataset.originalText = btn.textContent;
+                btn.textContent = 'Processing...';
+                btn.classList.add('loading');
+            }
+        });
+    });
+    </script>
 </body>
 </html>

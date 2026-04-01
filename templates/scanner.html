@@ -9,6 +9,7 @@
 
 <section class="card">
     <form method="POST" action="{{ url_for('do_scan') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label for="urls">Target URLs <small>(one per line — URLs must have query parameters)</small></label>
             <textarea
@@ -32,6 +33,9 @@
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" name="scan_lfi" value="1" {% if scan_lfi is not defined or scan_lfi %}checked{% endif %}> LFI/RFI
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="scan_redirect" value="1" {% if scan_redirect is not defined or scan_redirect %}checked{% endif %}> Open Redirect
                     </label>
                 </div>
             </div>
@@ -75,6 +79,18 @@
     </div>
 
     {% if findings %}
+    <div class="export-buttons">
+        <form method="POST" action="{{ url_for('export_scan') }}" style="display:inline">
+            <input type="hidden" name="findings_json" value="{{ findings_json or '[]' }}">
+            <input type="hidden" name="format" value="json">
+            <button type="submit" class="btn-small">Export JSON</button>
+        </form>
+        <form method="POST" action="{{ url_for('export_scan') }}" style="display:inline">
+            <input type="hidden" name="findings_json" value="{{ findings_json or '[]' }}">
+            <input type="hidden" name="format" value="csv">
+            <button type="submit" class="btn-small">Export CSV</button>
+        </form>
+    </div>
     <table class="findings-table">
         <thead>
             <tr>

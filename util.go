@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/logrusorgru/aurora/v3"
 	log "github.com/projectdiscovery/gologger"
@@ -53,7 +54,8 @@ func (opt *options) search() (bool, error) {
 
 	switch opt.Engine {
 	case "google":
-		regexes = `"><a href="\/url\?q=(.*?)&amp;sa=U&amp;`
+		// Updated regex: also match class="yuRUbf" result containers
+		regexes = `(?:"><a href="\/url\?q=|class="yuRUbf"><a href=")(.*?)(?:&amp;sa=U&amp;|" data-)`
 		baseURL = "https://www.google.com/search"
 		params = ("q=" + queryEsc + "&gws_rd=cr,ssl&client=ubuntu&ie=UTF-8&start=")
 	case "shodan":
@@ -65,13 +67,14 @@ func (opt *options) search() (bool, error) {
 		baseURL = "https://www.bing.com/search"
 		params = ("q=" + queryEsc + "&first=")
 	case "duck":
-		regexes = `<a rel=\"nofollow\" href=\"//duckduckgo.com/l/\?kh=-1&amp;uddg=(.*?)\">`
+		regexes = `(?:<a rel=\"nofollow\" href=\"//duckduckgo.com/l/\?kh=-1&amp;uddg=(.*?)\">|class=\"result__a\" href=\"(.*?)\")`
 		baseURL = "https://html.duckduckgo.com/html/"
 		params = ("q=" + queryEsc + "&_=")
 	case "yahoo":
-		regexes = `\" ac-algo fz-l ac-21th lh-24\" href=\"(.*?)\" referrerpolicy=\"origin`
+		// Updated Yahoo regex: match both old and new HTML structures
+		regexes = `(?:\" ac-algo fz-l ac-21th lh-24\" href=\"|class=\"ac-algo fz-l ac-21th lh-24\" href=\"|<a class=\"[^\"]*\" href=\")(.*?)(?:\" referrerpolicy=\"origin|\" target=\")`
 		baseURL = "https://search.yahoo.com/search"
-		params = ("q=" + queryEsc + "&b=")
+		params = ("p=" + queryEsc + "&b=")
 	case "ask":
 		regexes = `target=\"_blank\" href='(.*?)' data-unified=`
 		baseURL = "https://www.ask.com/web"
@@ -82,6 +85,11 @@ func (opt *options) search() (bool, error) {
 
 iterPage:
 	for p := 1; p <= opt.Page; p++ {
+		// Apply delay between requests (rate limiting)
+		if p > 1 && opt.Delay > 0 {
+			time.Sleep(time.Duration(opt.Delay) * time.Millisecond)
+		}
+
 		page := strconv.Itoa(p)
 		switch opt.Engine {
 		case "google":
@@ -93,7 +101,19 @@ iterPage:
 		scrape := opt.get(baseURL + "?" + params + page)
 		result := parser(scrape, regexes)
 		for i := range result {
-			url, err := url.QueryUnescape(result[i][1])
+			// Use the first non-empty capture group
+			capturedURL := ""
+			for g := 1; g < len(result[i]); g++ {
+				if result[i][g] != "" {
+					capturedURL = result[i][g]
+					break
+				}
+			}
+			if capturedURL == "" {
+				continue
+			}
+
+			url, err := url.QueryUnescape(capturedURL)
 			if err != nil {
 				return false, fmt.Errorf("when querying '%s' on page %d", queryEsc, p)
 			}
@@ -103,10 +123,6 @@ iterPage:
 			}
 
 			fmt.Printf("%s\n", url)
-		}
-
-		if opt.Engine == "duck" && p == 1 {
-			break
 		}
 	}
 

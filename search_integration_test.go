@@ -37,6 +37,28 @@ func mockResponseWithBody(body string) *http.Response {
 	}
 }
 
+// captureStdout runs fn while capturing stdout and returns the captured output.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	fn()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read captured stdout: %v", err)
+	}
+	return buf.String()
+}
+
 // ---------------------------------------------------------------------------
 // End-to-end search() tests — these actually call search() instead of manually
 // calling get() + parser() separately.
@@ -52,18 +74,12 @@ func TestSearchE2E_Google(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -71,7 +87,6 @@ func TestSearchE2E_Google(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	output := buf.String()
 	if !strings.Contains(output, "https://example.com") {
 		t.Errorf("expected output to contain 'https://example.com', got: %s", output)
 	}
@@ -88,18 +103,12 @@ func TestSearchE2E_Shodan(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "shodan", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "shodan", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,18 +128,12 @@ func TestSearchE2E_Bing(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "bing", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "bing", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -138,8 +141,8 @@ func TestSearchE2E_Bing(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://bing-result.com") {
-		t.Errorf("expected bing result URL in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://bing-result.com") {
+		t.Errorf("expected bing result URL in output, got: %s", output)
 	}
 }
 
@@ -153,18 +156,12 @@ func TestSearchE2E_Duck(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "duck", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "duck", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -172,8 +169,8 @@ func TestSearchE2E_Duck(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://duck-result.com") {
-		t.Errorf("expected duck result URL in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://duck-result.com") {
+		t.Errorf("expected duck result URL in output, got: %s", output)
 	}
 }
 
@@ -187,18 +184,12 @@ func TestSearchE2E_Yahoo(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "yahoo", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "yahoo", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,8 +197,8 @@ func TestSearchE2E_Yahoo(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://yahoo-result.com") {
-		t.Errorf("expected yahoo result URL in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://yahoo-result.com") {
+		t.Errorf("expected yahoo result URL in output, got: %s", output)
 	}
 }
 
@@ -221,18 +212,12 @@ func TestSearchE2E_Ask(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "ask", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "ask", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -240,8 +225,8 @@ func TestSearchE2E_Ask(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://ask-result.com") {
-		t.Errorf("expected ask result URL in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://ask-result.com") {
+		t.Errorf("expected ask result URL in output, got: %s", output)
 	}
 }
 
@@ -258,18 +243,12 @@ func TestSearchE2E_MultiPage(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 3}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 3}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -280,7 +259,6 @@ func TestSearchE2E_MultiPage(t *testing.T) {
 	if pages != 3 {
 		t.Errorf("expected 3 page requests, got %d", pages)
 	}
-	output := buf.String()
 	for i := 1; i <= 3; i++ {
 		expected := fmt.Sprintf("https://result-page%d.com", i)
 		if !strings.Contains(output, expected) {
@@ -301,15 +279,10 @@ func TestSearchE2E_GooglePageFormatting(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	opt.search()
-
-	w.Close()
-	os.Stdout = old
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		opt.search()
+	})
 
 	if !strings.Contains(requestedURL, "start=10") {
 		t.Errorf("expected Google start=10, got URL: %s", requestedURL)
@@ -328,15 +301,10 @@ func TestSearchE2E_BingPageFormatting(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "bing", Page: 1}
-	opt.search()
-
-	w.Close()
-	os.Stdout = old
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "bing", Page: 1}
+		opt.search()
+	})
 
 	if !strings.Contains(requestedURL, "first=11") {
 		t.Errorf("expected Bing first=11, got URL: %s", requestedURL)
@@ -355,15 +323,10 @@ func TestSearchE2E_YahooPageFormatting(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "yahoo", Page: 1}
-	opt.search()
-
-	w.Close()
-	os.Stdout = old
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "yahoo", Page: 1}
+		opt.search()
+	})
 
 	if !strings.Contains(requestedURL, "b=11") {
 		t.Errorf("expected Yahoo b=11, got URL: %s", requestedURL)
@@ -380,18 +343,12 @@ func TestSearchE2E_NoResults(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -399,8 +356,8 @@ func TestSearchE2E_NoResults(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if strings.TrimSpace(buf.String()) != "" {
-		t.Errorf("expected no output, got: %s", buf.String())
+	if strings.TrimSpace(output) != "" {
+		t.Errorf("expected no output, got: %s", output)
 	}
 }
 
@@ -416,15 +373,12 @@ func TestSearchE2E_InvalidURLEncoding(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
+	var fatal bool
+	var err error
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err == nil {
 		t.Error("expected error for invalid URL encoding")
@@ -448,15 +402,12 @@ func TestSearchE2E_BreaksOnNonURL(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 3}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
+	var fatal bool
+	var err error
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 3}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -483,18 +434,12 @@ func TestSearchE2E_WithDelay(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 2, Delay: 1} // 1ms delay
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 2, Delay: 1} // 1ms delay
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -519,15 +464,10 @@ func TestSearchE2E_SpecialCharsInQuery(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "site:example.com inurl:admin", Engine: "google", Page: 1}
-	opt.search()
-
-	w.Close()
-	os.Stdout = old
+	_ = captureStdout(t, func() {
+		opt := &options{Query: "site:example.com inurl:admin", Engine: "google", Page: 1}
+		opt.search()
+	})
 
 	if !strings.Contains(requestedURL, "site%3Aexample.com") {
 		t.Errorf("expected URL-encoded query in URL, got: %s", requestedURL)
@@ -546,18 +486,12 @@ func TestSearchE2E_DuckAlternateCapture(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "duck", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "duck", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -565,8 +499,8 @@ func TestSearchE2E_DuckAlternateCapture(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://duck-alt.com") {
-		t.Errorf("expected duck alternate result URL in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://duck-alt.com") {
+		t.Errorf("expected duck alternate result URL in output, got: %s", output)
 	}
 }
 
@@ -583,18 +517,12 @@ func TestSearchE2E_MultipleResultsOnePage(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -602,7 +530,6 @@ func TestSearchE2E_MultipleResultsOnePage(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	output := buf.String()
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) != 3 {
 		t.Errorf("expected 3 result lines, got %d: %s", len(lines), output)
@@ -620,18 +547,12 @@ func TestSearchE2E_GoogleYuRUbfPattern(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "google", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "google", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -639,8 +560,8 @@ func TestSearchE2E_GoogleYuRUbfPattern(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if !strings.Contains(buf.String(), "https://new-google-result.com") {
-		t.Errorf("expected yuRUbf pattern result in output, got: %s", buf.String())
+	if !strings.Contains(output, "https://new-google-result.com") {
+		t.Errorf("expected yuRUbf pattern result in output, got: %s", output)
 	}
 }
 
@@ -663,18 +584,12 @@ func TestSearchE2E_EmptyCaptureGroupsContinue(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "duck", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "duck", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -683,7 +598,6 @@ func TestSearchE2E_EmptyCaptureGroupsContinue(t *testing.T) {
 		t.Error("expected fatal=false")
 	}
 	// The empty capture group should be skipped, but the valid result should be output
-	output := buf.String()
 	if !strings.Contains(output, "https://valid-result.com") {
 		t.Errorf("expected valid result in output, got: %s", output)
 	}
@@ -697,18 +611,12 @@ func TestSearchE2E_EmptyCaptureGroupsSkipped(t *testing.T) {
 	})
 	defer cleanup()
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	opt := &options{Query: "test", Engine: "duck", Page: 1}
-	fatal, err := opt.search()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	var fatal bool
+	var err error
+	output := captureStdout(t, func() {
+		opt := &options{Query: "test", Engine: "duck", Page: 1}
+		fatal, err = opt.search()
+	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -716,7 +624,7 @@ func TestSearchE2E_EmptyCaptureGroupsSkipped(t *testing.T) {
 	if fatal {
 		t.Error("expected fatal=false")
 	}
-	if strings.TrimSpace(buf.String()) != "" {
-		t.Errorf("expected no output, got: %s", buf.String())
+	if strings.TrimSpace(output) != "" {
+		t.Errorf("expected no output, got: %s", output)
 	}
 }
